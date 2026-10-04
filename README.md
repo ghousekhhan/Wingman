@@ -82,7 +82,7 @@ cp .env.example .env
 
 | Variable | Description | Default |
 |---|---|---|
-| `DATABASE_URL` | SQLite or PostgreSQL connection string | `"file:./dev.db"` |
+| `NETLIFY_DB_URL` | Postgres connection string (set automatically on Netlify by Netlify Database) | — |
 | `OPENAI_API_KEY` | OpenAI API key for reasoning agent | (Optional for demo) |
 | `OPENAI_MODEL` | OpenAI Model | `gpt-6-luna` |
 | `GNANI_API_KEY` | Gnani Voice API Key | (Optional for voice STT/TTS) |
@@ -159,7 +159,7 @@ npm run build
 vercel
 ```
 
-For production deployments with Postgres, update `provider = "postgresql"` in `prisma/schema.prisma` and set `DATABASE_URL`.
+On Netlify, the app uses Netlify Database (managed Postgres). Schema migrations live in `netlify/database/migrations/` and are applied automatically on each deploy. The demo journey `ROOM-WING01` is created automatically the first time it is opened.
 
 ---
 

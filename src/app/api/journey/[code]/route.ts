@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
+import { seedJourney } from "../../../../../prisma/seed";
 
 export async function GET(
   req: NextRequest,
@@ -7,6 +8,12 @@ export async function GET(
 ) {
   try {
     const { code } = params;
+
+    // Fresh databases start empty, so create the demo journey on first access
+    if (code === "ROOM-WING01") {
+      const existing = await prisma.journey.findUnique({ where: { code }, select: { id: true } });
+      if (!existing) await seedJourney();
+    }
 
     const journey = await prisma.journey.findUnique({
       where: { code },
