@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "next lint",
     "seed": "tsx prisma/seed.ts",
-    "test": "tsx scripts/test-agent-simulations.ts"
+    "test": "tsx scripts/test-general-agent.ts",
+    "test:sim": "tsx scripts/test-agent-simulations.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
