@@ -63,6 +63,55 @@ export interface StructuredAgentResult {
   };
 }
 
+export interface IntakeStatus {
+  destination: boolean;
+  purpose: boolean;
+  dates: boolean;
+  travellers: boolean;
+  commitments: boolean;
+  constraints: boolean;
+  priorities: boolean;
+  budget: boolean;
+  authority: boolean;
+  isComplete: boolean;
+}
+
+export function calculateIntakeStatus(state: JourneyStateData): IntakeStatus {
+  const destination = !!(state.destination && state.destination.trim());
+  const purpose = !!(state.objective && state.objective.trim());
+  const dates = !!(state.dates && state.dates.trim());
+  const travellers = !!(state.travellers && state.travellers.length > 0);
+  const commitments = !!(state.commitments && state.commitments.length > 0) || purpose;
+  const constraints = !!(
+    (state.hardConstraints && state.hardConstraints.length > 0) ||
+    (state.accessibilityRequirements && state.accessibilityRequirements.length > 0)
+  );
+  const priorities = !!(
+    (state.softPreferences && state.softPreferences.length > 0) ||
+    (state.hardConstraints && state.hardConstraints.length > 0)
+  );
+  const budget = state.budget !== undefined && state.budget > 0;
+  const authority = state.autonomousAuthority !== undefined && state.autonomousAuthority > 0;
+
+  // Complete when key dimensions are covered
+  const isComplete = Boolean(
+    destination && purpose && (dates || commitments || (state.deadlines && state.deadlines.length > 0))
+  );
+
+  return {
+    destination,
+    purpose,
+    dates,
+    travellers,
+    commitments,
+    constraints,
+    priorities,
+    budget,
+    authority,
+    isComplete,
+  };
+}
+
 export interface JourneyStateData {
   objective?: string;
   origin?: string;
@@ -79,6 +128,7 @@ export interface JourneyStateData {
   autonomousAuthority?: number;
   riskTolerance?: string;
   bookings?: any[];
+  intakeStatus?: IntakeStatus;
   currentPlan?: Array<{
     step: number;
     mode: string;
@@ -94,6 +144,7 @@ export interface InterviewResult {
   updatedState: JourneyStateData;
   missingFields: string[];
   isReady: boolean;
+  intakeStatus?: IntakeStatus;
   spokenResponse: string;
   speechText?: string;
   message: string;
@@ -241,10 +292,13 @@ Extract newly provided information, merge with Current Journey State, identify w
       const speech = geminiOutput.speechText || geminiOutput.spokenResponse || "Got it. Tell me more about your journey.";
       const display = geminiOutput.displayText || geminiOutput.message || speech;
 
+      merged.intakeStatus = calculateIntakeStatus(merged);
+
       return {
         updatedState: merged,
         missingFields: geminiOutput.missingFields || [],
-        isReady: !!geminiOutput.isReady,
+        isReady: !!geminiOutput.isReady || merged.intakeStatus.isComplete,
+        intakeStatus: merged.intakeStatus,
         spokenResponse: speech,
         speechText: speech,
         message: display,
@@ -370,7 +424,7 @@ Extract newly provided information, merge with Current Journey State, identify w
     }
 
     // Extract Budget / Authority
-    const authorityMatch = text.match(/(?:authority|spend up to|limit|budget(?: is)?|extra(?: if)?|less than)\s*₹?\s*(\d+[\d,]*)/i)
+    const authorityMatch = text.match(/(?:autonomous limit|authority limit|spend limit|authority|spend up to|limit|budget|extra|less than)(?:\s+is|\s+of|:)?\s*₹?\s*(\d+[\d,]*)/i)
       || text.match(/₹\s*(\d+[\d,]*)/);
     if (authorityMatch) {
       const num = parseInt(authorityMatch[1].replace(/,/g, ""), 10);
@@ -416,10 +470,13 @@ Extract newly provided information, merge with Current Journey State, identify w
       suggestedQuestion = "What dates are you travelling?";
     }
 
+    updated.intakeStatus = calculateIntakeStatus(updated);
+
     return {
       updatedState: updated,
       missingFields: missing,
       isReady,
+      intakeStatus: updated.intakeStatus,
       spokenResponse,
       speechText: spokenResponse,
       message,

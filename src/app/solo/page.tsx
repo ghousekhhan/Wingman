@@ -27,6 +27,7 @@ import {
   Radio,
   Play,
   Check,
+  ShieldCheck,
 } from "lucide-react";
 import { JourneyStateData } from "@/lib/agent/gemini-agent";
 
@@ -43,7 +44,7 @@ export default function SoloJourneyPage() {
     {
       id: "msg-init",
       role: "agent",
-      text: "Tell me about your journey. You don't need to plan everything first. Just tell me what you're trying to do.",
+      text: "Tell me about your journey. You can tell me everything at once, or I'll ask you a few things as we go.",
       timestamp: "Just now",
     },
   ]);
@@ -62,6 +63,11 @@ export default function SoloJourneyPage() {
   const [statusMessage, setStatusMessage] = useState("Agent Ready");
   const [isAudioMuted, setIsAudioMuted] = useState(false);
   const [isPlanReady, setIsPlanReady] = useState(false);
+  const [planBuilt, setPlanBuilt] = useState(false);
+  const [selectedConstraintCards, setSelectedConstraintCards] = useState<string[]>([]);
+  const [nonNegotiableInput, setNonNegotiableInput] = useState("");
+  const [selectedPriorityCard, setSelectedPriorityCard] = useState<string>("");
+  const [authorityCard, setAuthorityCard] = useState<number>(10000);
 
   // Recovery & Disruption state
   const [activeDisruption, setActiveDisruption] = useState<any>(null);
@@ -706,101 +712,372 @@ export default function SoloJourneyPage() {
 
         {/* Right Column: Progressive Journey State & Living Plan (5 cols) */}
         <div className="lg:col-span-5 flex flex-col space-y-5">
-          {/* Card: WHAT WINGMAN KNOWS (Progressive State) */}
-          <div className="bg-[#0e1017] rounded-3xl border border-zinc-800/80 p-5 shadow-xl space-y-4">
-            <div className="flex items-center justify-between border-b border-zinc-800/80 pb-3">
+          {/* Card: WINGMAN IS LEARNING (Section 4 & 11 Live Intake Panel) */}
+          <div className="bg-[#0e1017] rounded-3xl border border-zinc-800/80 p-5 shadow-xl space-y-3">
+            <div className="flex items-center justify-between border-b border-zinc-800/80 pb-2.5">
               <div className="flex items-center gap-2">
                 <Sparkles className="w-4 h-4 text-indigo-400" />
-                <h3 className="text-xs font-mono uppercase tracking-wider text-zinc-300 font-bold">
-                  What Wingman Knows
+                <h3 className="text-xs font-mono uppercase tracking-wider text-zinc-200 font-bold">
+                  Wingman is Learning
                 </h3>
               </div>
               <span className="text-[10px] font-mono text-indigo-400 bg-indigo-950/60 px-2 py-0.5 rounded-full border border-indigo-500/20">
-                Living State
+                Live Intake
               </span>
             </div>
 
-            <div className="grid grid-cols-2 gap-3 text-xs">
-              <div className="p-3 rounded-xl bg-zinc-900/60 border border-zinc-800/60">
-                <span className="text-[10px] font-mono text-zinc-500 block uppercase">Destination</span>
-                <span className="font-bold text-white text-sm">
-                  {journeyState.destination || <span className="text-zinc-600 italic">Listening...</span>}
-                </span>
-              </div>
-
-              <div className="p-3 rounded-xl bg-zinc-900/60 border border-zinc-800/60">
-                <span className="text-[10px] font-mono text-zinc-500 block uppercase">Origin</span>
-                <span className="font-bold text-white text-sm">
-                  {journeyState.origin || <span className="text-zinc-600 italic">Hyderabad</span>}
-                </span>
-              </div>
-
-              <div className="p-3 rounded-xl bg-zinc-900/60 border border-zinc-800/60">
-                <span className="text-[10px] font-mono text-zinc-500 block uppercase">Purpose</span>
-                <span className="font-bold text-zinc-200">
-                  {journeyState.objective || <span className="text-zinc-600 italic">Discovered in chat</span>}
-                </span>
-              </div>
-
-              <div className="p-3 rounded-xl bg-zinc-900/60 border border-zinc-800/60">
-                <span className="text-[10px] font-mono text-zinc-500 block uppercase">Deadline</span>
-                <span className="font-bold text-amber-400">
-                  {journeyState.deadlines?.[0] || <span className="text-zinc-600 italic">Pending</span>}
-                </span>
-              </div>
-            </div>
-
-            {/* Constraints & Accessibility pills */}
-            <div className="space-y-2 pt-1 border-t border-zinc-800/60">
-              <span className="text-[10px] font-mono uppercase text-zinc-500 block">
-                Protected Constraints
-              </span>
-              <div className="flex flex-wrap gap-1.5">
-                {(journeyState.hardConstraints || []).length > 0 || (journeyState.accessibilityRequirements || []).length > 0 ? (
-                  <>
-                    {journeyState.hardConstraints?.map((c, i) => (
-                      <span
-                        key={i}
-                        className="text-[11px] font-mono bg-blue-950/60 text-blue-300 border border-blue-500/30 px-2 py-0.5 rounded-md"
-                      >
-                        ✓ {c}
-                      </span>
-                    ))}
-                    {journeyState.accessibilityRequirements?.map((a, i) => (
-                      <span
-                        key={i}
-                        className="text-[11px] font-mono bg-purple-950/60 text-purple-300 border border-purple-500/30 px-2 py-0.5 rounded-md"
-                      >
-                        ♿ {a}
-                      </span>
-                    ))}
-                  </>
+            <div className="grid grid-cols-2 gap-2 text-xs font-mono">
+              <div className="flex items-center gap-2">
+                {journeyState.destination ? (
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
                 ) : (
-                  <span className="text-xs text-zinc-500 italic">
-                    Tell Wingman about who is travelling or special requirements
-                  </span>
+                  <span className="w-3.5 h-3.5 rounded-full border border-zinc-600 inline-block shrink-0" />
                 )}
+                <span className={journeyState.destination ? "text-zinc-200" : "text-zinc-500"}>
+                  Destination {journeyState.destination ? `(${journeyState.destination})` : ""}
+                </span>
               </div>
-            </div>
 
-            {/* Autonomous Authority */}
-            <div className="flex items-center justify-between pt-2 border-t border-zinc-800/60 text-xs font-mono">
-              <span className="text-zinc-500">Autonomous Authority:</span>
-              <span className="text-emerald-400 font-bold">
-                ₹{(journeyState.autonomousAuthority || 10000).toLocaleString("en-IN")}
-              </span>
+              <div className="flex items-center gap-2">
+                {journeyState.objective ? (
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                ) : (
+                  <span className="w-3.5 h-3.5 rounded-full border border-zinc-600 inline-block shrink-0" />
+                )}
+                <span className={journeyState.objective ? "text-zinc-200" : "text-zinc-500"}>
+                  Purpose {journeyState.objective ? `(${journeyState.objective})` : ""}
+                </span>
+              </div>
+
+              <div className="flex items-center gap-2">
+                {journeyState.dates || (journeyState.deadlines && journeyState.deadlines.length > 0) ? (
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                ) : (
+                  <span className="w-3.5 h-3.5 rounded-full border border-zinc-600 inline-block shrink-0" />
+                )}
+                <span className={journeyState.dates || (journeyState.deadlines && journeyState.deadlines.length > 0) ? "text-zinc-200" : "text-zinc-500"}>
+                  Date / Deadline
+                </span>
+              </div>
+
+              <div className="flex items-center gap-2">
+                {(journeyState.travellers?.length || 0) > 0 ? (
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                ) : (
+                  <span className="w-3.5 h-3.5 rounded-full border border-zinc-600 inline-block shrink-0" />
+                )}
+                <span className={(journeyState.travellers?.length || 0) > 0 ? "text-zinc-200" : "text-zinc-500"}>
+                  Travellers ({journeyState.travellers?.length || 1})
+                </span>
+              </div>
+
+              <div className="flex items-center gap-2">
+                {journeyState.objective || (journeyState.commitments && journeyState.commitments.length > 0) ? (
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                ) : (
+                  <span className="w-3.5 h-3.5 rounded-full border border-zinc-600 inline-block shrink-0" />
+                )}
+                <span className={journeyState.objective || (journeyState.commitments && journeyState.commitments.length > 0) ? "text-zinc-200" : "text-zinc-500"}>
+                  Commitment
+                </span>
+              </div>
+
+              <div className="flex items-center gap-2">
+                {(journeyState.hardConstraints?.length || 0) > 0 || (journeyState.accessibilityRequirements?.length || 0) > 0 || selectedConstraintCards.length > 0 ? (
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                ) : (
+                  <span className="w-3.5 h-3.5 rounded-full border border-zinc-600 inline-block shrink-0" />
+                )}
+                <span className={(journeyState.hardConstraints?.length || 0) > 0 || selectedConstraintCards.length > 0 ? "text-zinc-200" : "text-zinc-500"}>
+                  Constraints
+                </span>
+              </div>
+
+              <div className="flex items-center gap-2">
+                {selectedPriorityCard || (journeyState.softPreferences && journeyState.softPreferences.length > 0) ? (
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                ) : (
+                  <span className="w-3.5 h-3.5 rounded-full border border-zinc-600 inline-block shrink-0" />
+                )}
+                <span className={selectedPriorityCard || (journeyState.softPreferences && journeyState.softPreferences.length > 0) ? "text-zinc-200" : "text-zinc-500"}>
+                  Priorities
+                </span>
+              </div>
+
+              <div className="flex items-center gap-2">
+                {journeyState.autonomousAuthority ? (
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                ) : (
+                  <span className="w-3.5 h-3.5 rounded-full border border-zinc-600 inline-block shrink-0" />
+                )}
+                <span className={journeyState.autonomousAuthority ? "text-zinc-200" : "text-zinc-500"}>
+                  Authority (₹{(journeyState.autonomousAuthority || 10000).toLocaleString("en-IN")})
+                </span>
+              </div>
             </div>
           </div>
 
-          {/* Living Plan Generator & Timeline */}
-          {isPlanReady ? (
+          {/* Section 7, 8, 9: Interactive Constraint Choice Cards */}
+          {!planBuilt && (
+            <div className="bg-[#0e1017] rounded-3xl border border-zinc-800/80 p-5 shadow-xl space-y-4">
+              <div>
+                <span className="text-[10px] font-mono uppercase text-indigo-400 font-bold block">
+                  Section 7: What Should Wingman Protect?
+                </span>
+                <p className="text-xs text-zinc-300 font-medium mt-1">
+                  Select constraints that Wingman must protect:
+                </p>
+              </div>
+
+              <div className="grid grid-cols-2 gap-1.5 text-[11px] font-mono">
+                {[
+                  "ARRIVE ON TIME",
+                  "STAY WITH MY GROUP",
+                  "KEEP COST LOW",
+                  "ACCESSIBILITY",
+                  "STAY WITH CHILDREN",
+                  "AVOID LONG WALKS",
+                  "AVOID FLYING",
+                  "COMFORT",
+                  "SPECIFIC HOTEL",
+                  "SPECIFIC TRANSPORT",
+                  "PROTECT IMPORTANT EVENT",
+                  "OTHER",
+                ].map((item) => {
+                  const isSel = selectedConstraintCards.includes(item);
+                  return (
+                    <button
+                      key={item}
+                      onClick={() => {
+                        const next = isSel
+                          ? selectedConstraintCards.filter((c) => c !== item)
+                          : [...selectedConstraintCards, item];
+                        setSelectedConstraintCards(next);
+                        setJourneyState((prev) => ({
+                          ...prev,
+                          hardConstraints: Array.from(new Set([...(prev.hardConstraints || []), ...next])),
+                        }));
+                      }}
+                      className={`px-2.5 py-2 rounded-xl text-left border transition flex items-center justify-between ${
+                        isSel
+                          ? "bg-indigo-950/80 border-indigo-500 text-white font-bold"
+                          : "bg-zinc-900/60 border-zinc-800 text-zinc-400 hover:text-white hover:border-zinc-700"
+                      }`}
+                    >
+                      <span className="truncate">{item}</span>
+                      {isSel && <Check className="w-3 h-3 text-indigo-400 shrink-0 ml-1" />}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Free-text Non-negotiable */}
+              <div className="space-y-1.5 pt-2 border-t border-zinc-800/60">
+                <label className="text-[11px] text-zinc-400 font-mono block">
+                  Is there anything Wingman must NEVER compromise?
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={nonNegotiableInput}
+                    onChange={(e) => setNonNegotiableInput(e.target.value)}
+                    placeholder="e.g., Grandmother cannot travel alone, wheelchair required..."
+                    className="flex-1 px-3 py-1.5 rounded-lg bg-black/60 border border-zinc-800 text-xs text-white placeholder:text-zinc-600 focus:outline-none focus:border-indigo-500"
+                  />
+                  <button
+                    onClick={() => {
+                      if (nonNegotiableInput.trim()) {
+                        handleSendInput(`Non-negotiable constraint: ${nonNegotiableInput.trim()}`);
+                        setNonNegotiableInput("");
+                      }
+                    }}
+                    className="px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-xs font-mono text-zinc-200 transition"
+                  >
+                    Add
+                  </button>
+                </div>
+              </div>
+
+              {/* Section 8: Priority Selection */}
+              <div className="space-y-2 pt-2 border-t border-zinc-800/60">
+                <span className="text-[10px] font-mono uppercase text-indigo-400 font-bold block">
+                  Section 8: Priority — If Something Goes Wrong, What Matters Most?
+                </span>
+                <div className="flex flex-wrap gap-1.5 text-[10px] font-mono">
+                  {[
+                    "ARRIVE ON TIME",
+                    "KEEP EVERYONE TOGETHER",
+                    "PROTECT ACCESSIBILITY",
+                    "STAY WITHIN BUDGET",
+                    "COMFORT",
+                    "PROTECT IMPORTANT EVENT",
+                    "LET ME DECIDE",
+                  ].map((p) => (
+                    <button
+                      key={p}
+                      onClick={() => {
+                        setSelectedPriorityCard(p);
+                        setJourneyState((prev) => ({
+                          ...prev,
+                          softPreferences: [p],
+                        }));
+                      }}
+                      className={`px-2.5 py-1.5 rounded-lg border transition ${
+                        selectedPriorityCard === p
+                          ? "bg-purple-950 border-purple-500 text-purple-200 font-bold"
+                          : "bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-white"
+                      }`}
+                    >
+                      {p}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Section 9: Spend Authority Choice */}
+              <div className="space-y-2 pt-2 border-t border-zinc-800/60">
+                <span className="text-[10px] font-mono uppercase text-indigo-400 font-bold block">
+                  Section 9: Autonomous Spending Authority
+                </span>
+                <div className="flex flex-wrap gap-2 text-xs font-mono">
+                  {[0, 2500, 5000, 10000].map((amt) => (
+                    <button
+                      key={amt}
+                      onClick={() => {
+                        setAuthorityCard(amt);
+                        setJourneyState((prev) => ({ ...prev, autonomousAuthority: amt, budget: amt }));
+                      }}
+                      className={`px-3 py-1.5 rounded-lg border transition ${
+                        authorityCard === amt
+                          ? "bg-emerald-950 border-emerald-500 text-emerald-300 font-bold"
+                          : "bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-white"
+                      }`}
+                    >
+                      {amt === 0 ? "₹0" : `₹${amt.toLocaleString("en-IN")}`}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Section 12: WHAT I'M PROTECTING & BUILD MY JOURNEY BUTTON */}
+          {(journeyState.destination || isPlanReady || selectedConstraintCards.length > 0) && (
+            <div className="p-5 rounded-3xl bg-gradient-to-br from-indigo-950/60 to-zinc-900 border border-indigo-500/40 space-y-3 text-xs shadow-xl animate-in fade-in duration-200">
+              <div className="flex items-center justify-between border-b border-indigo-800/40 pb-2.5">
+                <div className="flex items-center gap-2">
+                  <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                  <span className="font-bold text-white uppercase tracking-wider text-xs">
+                    What I&apos;m Protecting
+                  </span>
+                </div>
+                <span className="text-[10px] font-mono text-emerald-400 bg-emerald-950 px-2 py-0.5 rounded border border-emerald-500/30">
+                  {planBuilt ? "Journey Active" : "Intake Complete"}
+                </span>
+              </div>
+
+              <div className="space-y-1.5 text-zinc-200 font-mono text-[11px]">
+                <div>✓ {journeyState.objective || "Sister's Wedding"} — 7 PM</div>
+                <div>✓ Arrive before {journeyState.deadlines?.[0] || "6 PM"}</div>
+                <div>✓ Stay with family ({journeyState.travellers?.join(", ") || "Rahul, Meera, Arjun, Sara, Kabir"})</div>
+                <div>✓ Meera&apos;s wheelchair accessibility preserved</div>
+                <div>✓ ₹{(journeyState.autonomousAuthority || authorityCard || 10000).toLocaleString("en-IN")} autonomous authority</div>
+              </div>
+
+              {!planBuilt ? (
+                <div className="pt-2">
+                  <p className="text-zinc-400 mb-2 font-sans text-xs">
+                    Ready for me to build your journey?
+                  </p>
+                  <button
+                    onClick={() => {
+                      setPlanBuilt(true);
+                      setIsPlanReady(true);
+                      if (!journeyState.currentPlan || journeyState.currentPlan.length === 0) {
+                        setJourneyState((prev) => ({
+                          ...prev,
+                          currentPlan: [
+                            {
+                              step: 1,
+                              mode: "FLIGHT",
+                              detail: `Flight 6E-542 (${prev.origin || "Hyderabad"} to ${prev.destination || "Goa"})`,
+                              departure: "1:20 PM",
+                              arrival: "2:40 PM",
+                              status: "CONFIRMED",
+                            },
+                            {
+                              step: 2,
+                              mode: "TRANSFER",
+                              detail: `Accessible 6-Seater Van from ${prev.destination || "Goa"} Airport to Hotel`,
+                              departure: "3:00 PM",
+                              arrival: "3:45 PM",
+                              status: "CONFIRMED",
+                            },
+                            {
+                              step: 3,
+                              mode: "HOTEL",
+                              detail: `Check-in & Buffer at Vivanta Grand`,
+                              departure: "4:00 PM",
+                              arrival: "6:00 PM",
+                              status: "BUFFER_SECURED",
+                            },
+                            {
+                              step: 4,
+                              mode: "COMMITMENT",
+                              detail: prev.objective || "Sister's Wedding",
+                              departure: "7:00 PM",
+                              arrival: "11:00 PM",
+                              status: "PROTECTED",
+                            },
+                          ],
+                        }));
+                      }
+                    }}
+                    className="w-full py-3.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 font-bold text-xs uppercase text-white tracking-wider shadow-lg shadow-indigo-950 transition flex items-center justify-center gap-2"
+                  >
+                    <Sparkles className="w-4 h-4 text-amber-300" />
+                    <span>BUILD MY JOURNEY</span>
+                  </button>
+                </div>
+              ) : null}
+            </div>
+          )}
+
+          {/* Section 36: "WINGMAN IS WORKING" LIVE PANEL (visible during recovery/processing) */}
+          {(isProcessing || activeDisruption || recoveryExecuted) && (
+            <div className="p-4 rounded-3xl bg-zinc-900/90 border border-indigo-500/30 space-y-2 text-xs font-mono shadow-xl animate-in fade-in duration-200">
+              <div className="flex items-center justify-between border-b border-zinc-800 pb-2">
+                <span className="text-[10px] text-indigo-400 uppercase font-bold flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-indigo-400 animate-pulse" />
+                  Wingman is Working
+                </span>
+                <span className="text-[10px] text-zinc-500">Autonomous Continuity Engine</span>
+              </div>
+              <div className="space-y-1 text-zinc-300 text-[11px]">
+                <div className="text-emerald-400">✓ Flight recovered</div>
+                <div className="text-emerald-400">✓ New arrival confirmed</div>
+                <div className="text-emerald-400">✓ Airport exit recalculated (+25 min)</div>
+                <div className="text-emerald-400">✓ Previous cab invalidated</div>
+                <div className="text-emerald-400">✓ Mobility provider contacted</div>
+                <div className="text-emerald-400">✓ New ride secured (Toyota Vellfire 6-seater)</div>
+                <div className="text-emerald-400">✓ Accessibility verified (Meera ramp equipped)</div>
+                <div className="text-amber-300 flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-ping inline-block" />
+                  Driver assignment pending (Santosh Naik on standby)
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Living Plan Generator & Timeline (Only visible after clicking BUILD MY JOURNEY) */}
+          {planBuilt && (
             <div className="bg-[#0e1017] rounded-3xl border border-zinc-800/80 p-5 shadow-xl space-y-4 animate-in fade-in duration-300">
               <div className="flex items-center justify-between border-b border-zinc-800/80 pb-3">
                 <div>
                   <span className="text-[10px] font-mono uppercase tracking-wider text-emerald-400 block">
                     ✓ Protected Outcome
                   </span>
-                  <h3 className="text-base font-bold text-white">Wingman&apos;s Plan</h3>
+                  <h3 className="text-base font-bold text-white">Wingman&apos;s Living Plan</h3>
                 </div>
                 <span className="text-xs font-mono bg-emerald-950/60 text-emerald-400 border border-emerald-500/30 px-2.5 py-1 rounded-full">
                   Continuous
@@ -866,7 +1143,7 @@ export default function SoloJourneyPage() {
               </div>
 
               {/* Live Disruption Simulator Trigger */}
-              <div className="pt-3 border-t border-zinc-800/60">
+              <div className="pt-3 border-t border-zinc-800/60 space-y-2">
                 <button
                   onClick={() => handleDisruptionTrigger("My flight was cancelled.")}
                   className="w-full py-2.5 rounded-xl bg-rose-950/40 hover:bg-rose-900/60 border border-rose-500/40 text-rose-300 text-xs font-mono font-bold transition flex items-center justify-center gap-2"
@@ -874,9 +1151,18 @@ export default function SoloJourneyPage() {
                   <AlertTriangle className="w-3.5 h-3.5 text-rose-400" />
                   <span>Simulate Flight Cancellation Disruption</span>
                 </button>
+                <button
+                  onClick={() => handleSendInput("Flight arrival is now 18:40")}
+                  className="w-full py-2 rounded-xl bg-amber-950/40 hover:bg-amber-900/60 border border-amber-500/40 text-amber-300 text-xs font-mono font-bold transition flex items-center justify-center gap-2"
+                >
+                  <Car className="w-3.5 h-3.5 text-amber-400" />
+                  <span>Simulate Upstream Flight Delay (Arrival 18:40 &rarr; Recalculate Cab)</span>
+                </button>
               </div>
             </div>
-          ) : (
+          )}
+
+          {!planBuilt && !journeyState.destination && selectedConstraintCards.length === 0 && (
             <div className="p-8 rounded-3xl bg-zinc-900/30 border border-dashed border-zinc-800 text-center space-y-3">
               <Clock className="w-8 h-8 text-zinc-600 mx-auto" />
               <h4 className="text-sm font-semibold text-zinc-400">Listening to Your Journey</h4>

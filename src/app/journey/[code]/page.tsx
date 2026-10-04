@@ -43,6 +43,10 @@ export default function JourneyHomePage({ params }: { params: { code: string } }
   const [activeDisruptionForDecision, setActiveDisruptionForDecision] = useState<string | null>(null);
   const [isSurgeExceeded, setIsSurgeExceeded] = useState(false);
 
+  // Group intake completion & gate state (Sections 15, 16, 18, 19)
+  const [completedIntakeCount, setCompletedIntakeCount] = useState(5);
+  const [groupPlanBuilt, setGroupPlanBuilt] = useState(true);
+
   // Simulation & Modal state
   const [isSimulationOpen, setIsSimulationOpen] = useState(false);
   const [isDecisionOpen, setIsDecisionOpen] = useState(false);
@@ -228,6 +232,78 @@ export default function JourneyHomePage({ params }: { params: { code: string } }
               </div>
             </div>
 
+            {/* Section 15 & 16: EVERY TRAVELLER MUST COMPLETE INTAKE */}
+            {completedIntakeCount < 5 && (
+              <div className="p-6 rounded-3xl bg-amber-950/30 border-2 border-amber-600/70 text-center space-y-3 shadow-xl">
+                <div className="flex items-center justify-center gap-2 text-amber-400 font-bold uppercase tracking-wider text-sm">
+                  <Clock className="w-5 h-5 animate-pulse" />
+                  <span>WAITING FOR EVERYONE</span>
+                </div>
+                <p className="text-xs text-zinc-300 max-w-md mx-auto leading-relaxed">
+                  Hard Rule: Wingman will NOT generate a group plan or execute group recoveries until all 5 travellers complete their private intake.
+                </p>
+                <div className="flex items-center justify-center gap-2 font-mono text-xs text-zinc-400">
+                  <span className="font-bold text-white">{completedIntakeCount} / 5 COMPLETE</span>
+                  <span>•</span>
+                  <span className="text-amber-300">Waiting for Sara and Kabir</span>
+                </div>
+                <div className="pt-2">
+                  <button
+                    onClick={() => {
+                      setCompletedIntakeCount(5);
+                    }}
+                    className="px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-500 font-bold text-xs uppercase text-black tracking-wider transition shadow-lg"
+                  >
+                    Simulate Sara &amp; Kabir Intake Complete (5/5)
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Section 18 & 19: Derived Group Constraints & What Wingman is Protecting */}
+            {completedIntakeCount === 5 && !groupPlanBuilt && (
+              <div className="p-6 rounded-3xl bg-[#0e1017] border border-indigo-500/40 space-y-4 shadow-xl">
+                <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
+                  <div>
+                    <span className="text-[10px] font-mono uppercase text-indigo-400 font-bold block">
+                      Section 18 &amp; 19: All 5 Travellers Complete
+                    </span>
+                    <h3 className="text-base font-bold text-white">Derived Group Constraints</h3>
+                  </div>
+                  <span className="text-xs font-mono bg-emerald-950 text-emerald-400 px-2.5 py-1 rounded-full border border-emerald-500/30">
+                    5 / 5 Complete
+                  </span>
+                </div>
+                <div className="space-y-2 text-xs font-mono text-zinc-300">
+                  <div className="p-2.5 rounded-xl bg-zinc-900 border border-zinc-800">
+                    <span className="text-indigo-400 font-bold">Meera (Cannot travel alone) + Sara (Stay with group):</span>
+                    <div className="text-white font-bold mt-0.5">Derived: ALL TRAVELLERS SHOULD REMAIN TOGETHER</div>
+                  </div>
+                  <div className="p-2.5 rounded-xl bg-zinc-900 border border-zinc-800">
+                    <span className="text-purple-400 font-bold">Meera (Accessibility assistance):</span>
+                    <div className="text-white font-bold mt-0.5">Derived: ANY VALID RECOVERY MUST PRESERVE ACCESSIBILITY</div>
+                  </div>
+                </div>
+                <div className="p-4 rounded-xl bg-indigo-950/40 border border-indigo-800/40 space-y-2 text-xs">
+                  <div className="font-bold text-white uppercase text-[11px] font-mono">What Wingman is Protecting:</div>
+                  <div className="space-y-1 font-mono text-[11px] text-zinc-300">
+                    <div>✓ Wedding at 7 PM</div>
+                    <div>✓ Arrival before 6 PM</div>
+                    <div>✓ Everyone stays together</div>
+                    <div>✓ Meera accessibility</div>
+                    <div>✓ ₹10,000 authority</div>
+                  </div>
+                  <button
+                    onClick={() => setGroupPlanBuilt(true)}
+                    className="w-full mt-3 py-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 font-bold text-xs uppercase text-white tracking-wider shadow-lg transition flex items-center justify-center gap-2"
+                  >
+                    <Sparkles className="w-4 h-4 text-amber-300" />
+                    <span>BUILD JOURNEY</span>
+                  </button>
+                </div>
+              </div>
+            )}
+
             {/* Simple Journey Timeline: HYDERABAD ↓ FLIGHT ↓ GOA ↓ TRANSFER ↓ HOTEL ↓ WEDDING */}
             <div className="p-5 rounded-2xl border border-zinc-800/80 bg-[#0e1017] space-y-4">
               <div className="flex items-center justify-between text-[11px] font-mono text-zinc-500">
@@ -237,65 +313,81 @@ export default function JourneyHomePage({ params }: { params: { code: string } }
                 </span>
               </div>
 
-              <div className="grid grid-cols-2 sm:grid-cols-6 gap-2 text-center text-xs font-mono">
-                {/* Node 1: Origin */}
-                <div className="p-2.5 rounded-xl bg-zinc-900/60 border border-zinc-800/80 space-y-1">
-                  <div className="text-zinc-500 text-[10px]">ORIGIN</div>
-                  <div className="font-bold text-white">HYDERABAD</div>
-                  <div className="text-[10px] text-zinc-400">Depart 3:45 PM</div>
-                </div>
+              {(() => {
+                const isUpstreamShifted = !!lastAgentResult?.mobilityDependency;
+                const flightArr = isUpstreamShifted
+                  ? lastAgentResult.mobilityDependency.newFlightArrival
+                  : status === "RECOVERED"
+                  ? "5:20 PM"
+                  : "2:40 PM";
+                const cabPick = isUpstreamShifted
+                  ? lastAgentResult.mobilityDependency.newPickupTarget
+                  : status === "RECOVERED"
+                  ? "5:35 PM"
+                  : "3:00 PM";
 
-                {/* Node 2: Flight */}
-                <div className="p-2.5 rounded-xl bg-zinc-900/60 border border-zinc-800/80 space-y-1">
-                  <div className="text-zinc-500 text-[10px] flex items-center justify-center gap-1">
-                    <Plane className="w-3 h-3 text-indigo-400" /> FLIGHT
-                  </div>
-                  <div className="font-bold text-white">
-                    {status === "RECOVERED" ? "6E-891" : "6E-542"}
-                  </div>
-                  <div className={`text-[10px] font-semibold ${status === "RECOVERED" ? "text-emerald-400" : "text-zinc-400"}`}>
-                    {status === "RECOVERED" ? "5:20 PM Arr" : "2:40 PM Arr"}
-                  </div>
-                </div>
+                return (
+                  <div className="grid grid-cols-2 sm:grid-cols-6 gap-2 text-center text-xs font-mono">
+                    {/* Node 1: Origin */}
+                    <div className="p-2.5 rounded-xl bg-zinc-900/60 border border-zinc-800/80 space-y-1">
+                      <div className="text-zinc-500 text-[10px]">ORIGIN</div>
+                      <div className="font-bold text-white">HYDERABAD</div>
+                      <div className="text-[10px] text-zinc-400">Depart 3:45 PM</div>
+                    </div>
 
-                {/* Node 3: Goa Airport */}
-                <div className="p-2.5 rounded-xl bg-zinc-900/60 border border-zinc-800/80 space-y-1">
-                  <div className="text-zinc-500 text-[10px]">AIRPORT</div>
-                  <div className="font-bold text-white">GOA (GOI)</div>
-                  <div className="text-[10px] text-zinc-400">Dabolim Hub</div>
-                </div>
+                    {/* Node 2: Flight */}
+                    <div className="p-2.5 rounded-xl bg-zinc-900/60 border border-zinc-800/80 space-y-1">
+                      <div className="text-zinc-500 text-[10px] flex items-center justify-center gap-1">
+                        <Plane className="w-3 h-3 text-indigo-400" /> FLIGHT
+                      </div>
+                      <div className="font-bold text-white">
+                        {status === "RECOVERED" ? "6E-891" : "6E-542"}
+                      </div>
+                      <div className={`text-[10px] font-semibold ${status === "RECOVERED" ? "text-emerald-400" : "text-zinc-400"}`}>
+                        {flightArr} Arr
+                      </div>
+                    </div>
 
-                {/* Node 4: Transfer */}
-                <div className="p-2.5 rounded-xl bg-zinc-900/60 border border-zinc-800/80 space-y-1">
-                  <div className="text-zinc-500 text-[10px] flex items-center justify-center gap-1">
-                    <Car className="w-3 h-3 text-indigo-400" /> TRANSFER
-                  </div>
-                  <div className="font-bold text-white">
-                    {status === "RECOVERED" ? "VAN-8841" : "CAB-88"}
-                  </div>
-                  <div className={`text-[10px] font-semibold ${status === "RECOVERED" ? "text-emerald-400" : "text-zinc-400"}`}>
-                    {status === "RECOVERED" ? "5:35 PM Pickup" : "3:00 PM Pickup"}
-                  </div>
-                </div>
+                    {/* Node 3: Goa Airport */}
+                    <div className="p-2.5 rounded-xl bg-zinc-900/60 border border-zinc-800/80 space-y-1">
+                      <div className="text-zinc-500 text-[10px]">AIRPORT</div>
+                      <div className="font-bold text-white">GOA (GOI)</div>
+                      <div className="text-[10px] text-zinc-400">Dabolim Hub</div>
+                    </div>
 
-                {/* Node 5: Hotel */}
-                <div className="p-2.5 rounded-xl bg-zinc-900/60 border border-zinc-800/80 space-y-1">
-                  <div className="text-zinc-500 text-[10px] flex items-center justify-center gap-1">
-                    <Hotel className="w-3 h-3 text-indigo-400" /> HOTEL
-                  </div>
-                  <div className="font-bold text-white">VIVANTA</div>
-                  <div className="text-[10px] text-emerald-400">Accessible Ground</div>
-                </div>
+                    {/* Node 4: Transfer */}
+                    <div className="p-2.5 rounded-xl bg-zinc-900/60 border border-zinc-800/80 space-y-1">
+                      <div className="text-zinc-500 text-[10px] flex items-center justify-center gap-1">
+                        <Car className="w-3 h-3 text-indigo-400" /> TRANSFER
+                      </div>
+                      <div className="font-bold text-white">
+                        {status === "RECOVERED" ? "VAN-8841" : "CAB-88"}
+                      </div>
+                      <div className={`text-[10px] font-semibold ${status === "RECOVERED" ? "text-emerald-400" : "text-zinc-400"}`}>
+                        {cabPick} Pickup
+                      </div>
+                    </div>
 
-                {/* Node 6: Protected Outcome */}
-                <div className="p-2.5 rounded-xl bg-indigo-950/40 border border-indigo-700/60 space-y-1">
-                  <div className="text-indigo-400 text-[10px] flex items-center justify-center gap-1 font-bold">
-                    <PartyPopper className="w-3 h-3" /> WEDDING
+                    {/* Node 5: Hotel */}
+                    <div className="p-2.5 rounded-xl bg-zinc-900/60 border border-zinc-800/80 space-y-1">
+                      <div className="text-zinc-500 text-[10px] flex items-center justify-center gap-1">
+                        <Hotel className="w-3 h-3 text-indigo-400" /> HOTEL
+                      </div>
+                      <div className="font-bold text-white">VIVANTA</div>
+                      <div className="text-[10px] text-emerald-400">Accessible Ground</div>
+                    </div>
+
+                    {/* Node 6: Protected Outcome */}
+                    <div className="p-2.5 rounded-xl bg-indigo-950/40 border border-indigo-700/60 space-y-1">
+                      <div className="text-indigo-400 text-[10px] flex items-center justify-center gap-1 font-bold">
+                        <PartyPopper className="w-3 h-3" /> WEDDING
+                      </div>
+                      <div className="font-bold text-white">7:00 PM</div>
+                      <div className="text-[10px] text-amber-300 font-bold">Arrive &lt; 6 PM</div>
+                    </div>
                   </div>
-                  <div className="font-bold text-white">7:00 PM</div>
-                  <div className="text-[10px] text-amber-300 font-bold">Arrive &lt; 6 PM</div>
-                </div>
-              </div>
+                );
+              })()}
 
               <div className="pt-2 border-t border-zinc-800/60 flex items-center justify-between text-xs text-zinc-400">
                 <span className="flex items-center gap-1.5">
@@ -303,6 +395,113 @@ export default function JourneyHomePage({ params }: { params: { code: string } }
                   {status === "RECOVERED" ? "Journey outcome fully recovered and on schedule." : "Everything is currently protected."}
                 </span>
                 <span className="text-[11px] font-mono text-zinc-500">5 Travellers Synchronized</span>
+              </div>
+            </div>
+
+            {/* SECTION 22: SYNCHRONIZED GROUND TRANSFER CALCULATION */}
+            {(() => {
+              const isUpstreamShifted = !!lastAgentResult?.mobilityDependency;
+              const curArrival = isUpstreamShifted
+                ? lastAgentResult.mobilityDependency.newFlightArrival
+                : status === "RECOVERED"
+                ? "17:20"
+                : "18:00";
+              const curExit = isUpstreamShifted
+                ? lastAgentResult.mobilityDependency.expectedAirportExit
+                : status === "RECOVERED"
+                ? "17:45"
+                : "18:25";
+              const curTarget = isUpstreamShifted
+                ? lastAgentResult.mobilityDependency.newPickupTarget
+                : status === "RECOVERED"
+                ? "17:55"
+                : "18:35";
+
+              return (
+                <div className="p-4 rounded-2xl bg-zinc-900/60 border border-zinc-800 space-y-3 font-mono text-xs">
+                  <div className="flex items-center justify-between text-[11px] text-zinc-400">
+                    <span className="uppercase text-indigo-400 font-bold">
+                      Section 22: Synchronized Ground Transfer Calculation
+                    </span>
+                    <span className="text-zinc-500">Buffer: 25m Exit + 10m Mobility</span>
+                  </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center">
+                    <div className="p-2.5 rounded-xl bg-black/50 border border-zinc-800">
+                      <div className="text-[10px] text-zinc-500">FLIGHT ARRIVAL</div>
+                      <div className="text-sm font-bold text-white">{curArrival}</div>
+                      <div className="text-[10px] text-zinc-400">Landing Target</div>
+                    </div>
+                    <div className="p-2.5 rounded-xl bg-black/50 border border-zinc-800">
+                      <div className="text-[10px] text-zinc-500">AIRPORT EXIT</div>
+                      <div className="text-sm font-bold text-amber-300">{curExit}</div>
+                      <div className="text-[10px] text-zinc-400">+25m Baggage/Disembark</div>
+                    </div>
+                    <div className="p-2.5 rounded-xl bg-indigo-950/60 border border-indigo-700/60">
+                      <div className="text-[10px] text-indigo-400 font-bold">CAB PICKUP TARGET</div>
+                      <div className="text-sm font-bold text-emerald-400">{curTarget}</div>
+                      <div className="text-[10px] text-zinc-300">+10m Mobility Buffer</div>
+                    </div>
+                    <div className="p-2.5 rounded-xl bg-black/50 border border-zinc-800">
+                      <div className="text-[10px] text-zinc-500">DESTINATION</div>
+                      <div className="text-sm font-bold text-white">Wedding Venue</div>
+                      <div className="text-[10px] text-emerald-400">Protected: 19:00</div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* SECTION 31: GROUP MOBILITY REQUIREMENTS */}
+            <div className="p-4 rounded-2xl bg-zinc-900/40 border border-zinc-800 space-y-2 text-xs">
+              <div className="flex items-center justify-between font-mono">
+                <span className="font-bold text-white uppercase text-[11px]">Group Mobility Requirements</span>
+                <span className="text-indigo-400 text-[10px]">Deterministic Validation</span>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 font-mono text-[11px]">
+                <div className="p-2 rounded-lg bg-black/40 border border-zinc-800 text-emerald-400 flex items-center gap-1.5">
+                  <CheckCircle2 className="w-3.5 h-3.5" /> 5 travellers ✓
+                </div>
+                <div className="p-2 rounded-lg bg-black/40 border border-zinc-800 text-emerald-400 flex items-center gap-1.5">
+                  <CheckCircle2 className="w-3.5 h-3.5" /> Stay together ✓
+                </div>
+                <div className="p-2 rounded-lg bg-black/40 border border-zinc-800 text-emerald-400 flex items-center gap-1.5">
+                  <CheckCircle2 className="w-3.5 h-3.5" /> Accessibility ✓
+                </div>
+                <div className="p-2 rounded-lg bg-black/40 border border-zinc-800 text-emerald-400 flex items-center gap-1.5">
+                  <CheckCircle2 className="w-3.5 h-3.5" /> 6+ seats ✓
+                </div>
+                <div className="p-2 rounded-lg bg-black/40 border border-zinc-800 text-emerald-400 flex items-center gap-1.5">
+                  <CheckCircle2 className="w-3.5 h-3.5" /> Airport pickup ✓
+                </div>
+                <div className="p-2 rounded-lg bg-black/40 border border-zinc-800 text-emerald-400 flex items-center gap-1.5">
+                  <CheckCircle2 className="w-3.5 h-3.5" /> Wedding destination ✓
+                </div>
+              </div>
+            </div>
+
+            {/* SECTION 32 & 33: DRIVER ASSIGNMENT & LIFECYCLE MONITORING */}
+            <div className="p-4 rounded-2xl bg-[#0e1017] border border-zinc-800 space-y-3 text-xs">
+              <div className="flex items-center justify-between font-mono text-[11px]">
+                <span className="font-bold text-zinc-300 uppercase">Driver Lifecycle &amp; Telemetry</span>
+                <span className="text-emerald-400 bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-500/20">
+                  Active Dispatch
+                </span>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="p-3 rounded-xl bg-zinc-900/60 border border-zinc-800 space-y-1">
+                  <div className="text-[10px] text-zinc-500 font-mono">ASSIGNED CHAUFFEUR</div>
+                  <div className="font-bold text-white text-sm">Santosh Naik</div>
+                  <div className="text-[11px] text-zinc-400 font-mono">Vehicle: Toyota Vellfire 6-Seater (GA-01-AX-9941)</div>
+                  <div className="text-[10px] text-emerald-400 font-mono">Rating: 4.95 ★ • Hydraulic Ramp Certified</div>
+                </div>
+                <div className="p-3 rounded-xl bg-zinc-900/60 border border-zinc-800 space-y-1 font-mono text-[11px]">
+                  <div className="text-[10px] text-zinc-500">LIFECYCLE TELEMETRY</div>
+                  <div className="text-zinc-300">Flight Landed: <strong className="text-white">17:22</strong></div>
+                  <div className="text-zinc-300">Expected Exit: <strong className="text-white">17:45</strong></div>
+                  <div className="text-zinc-300">Traveller Exited: <strong className="text-white">17:48</strong></div>
+                  <div className="text-zinc-300">Driver Notified: <strong className="text-white">17:49</strong></div>
+                  <div className="text-emerald-400 font-bold">Passenger Picked Up: 17:52 &rarr; ETA Venue: 18:35</div>
+                </div>
               </div>
             </div>
 
@@ -452,6 +651,38 @@ export default function JourneyHomePage({ params }: { params: { code: string } }
                     <Send className="w-4 h-4" />
                   </button>
                 </div>
+              </div>
+
+              {/* Quick Prompt Chips (including Section 52 Upstream Delay) */}
+              <div className="flex flex-wrap gap-1.5 pt-1">
+                <button
+                  onClick={() => handleSendMessage("Flight HYD-GOI was cancelled")}
+                  disabled={isProcessing}
+                  className="px-2.5 py-1 rounded-lg bg-rose-950/60 hover:bg-rose-900 border border-rose-500/30 text-[11px] font-mono text-rose-300 transition"
+                >
+                  ⚡ &ldquo;Flight HYD-GOI was cancelled&rdquo;
+                </button>
+                <button
+                  onClick={() => handleSendMessage("Flight arrival is now 18:40")}
+                  disabled={isProcessing}
+                  className="px-2.5 py-1 rounded-lg bg-amber-950/60 hover:bg-amber-900 border border-amber-500/30 text-[11px] font-mono text-amber-300 transition"
+                >
+                  ⚡ &ldquo;Flight arrival is now 18:40 (Section 52 Test)&rdquo;
+                </button>
+                <button
+                  onClick={() => handleSendMessage("My train is delayed by 3 hours")}
+                  disabled={isProcessing}
+                  className="px-2.5 py-1 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-[11px] font-mono text-zinc-300 transition"
+                >
+                  &ldquo;Train delayed by 3 hours&rdquo;
+                </button>
+                <button
+                  onClick={() => handleSendMessage("I can spend up to 5000")}
+                  disabled={isProcessing}
+                  className="px-2.5 py-1 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-[11px] font-mono text-zinc-300 transition"
+                >
+                  &ldquo;Update authority to ₹5,000&rdquo;
+                </button>
               </div>
             </div>
           </div>

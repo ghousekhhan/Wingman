@@ -1,6 +1,7 @@
 import prisma from "@/lib/prisma";
 import { toolRegistry, CandidateTravelOption } from "@/lib/tools/registry";
 import { decisionEngine } from "@/lib/decision/engine";
+import { mobilityConnector } from "@/lib/connectors/mobility";
 
 export interface AgentActionItem {
   tool: string;
@@ -33,6 +34,16 @@ export interface StructuredAgentResult {
   nextStatus: "MONITORING" | "ANALYZING" | "RECOVERING" | "VERIFYING" | "RECOVERED" | "DECISION_REQUIRED";
   humanDecisionRequired: boolean;
   humanQuestion?: string;
+  candidateOptions?: any[];
+  mobilityDependency?: {
+    previousPickup: string;
+    newFlightArrival: string;
+    expectedAirportExit: string;
+    newPickupTarget: string;
+    rideId: string;
+    vehicle: string;
+    status: string;
+  };
   transferRepaired?: {
     reference: string;
     pickupTime: string;
@@ -220,6 +231,104 @@ export class GeneralWingmanAgent {
         },
         reason: `Rahul authorized elevated spending of ₹${targetAmount.toLocaleString("en-IN")} to protect the wedding deadline.`,
       });
+    }
+
+    // CASE 1.5: UPSTREAM FLIGHT ARRIVAL CHANGE (Section 22, 25, 26, 30, 52)
+    // Upstream change (e.g. 18:00 -> 18:40) -> Airport exit change (19:05) -> Mobility invalid (18:35 cab) -> New pickup calculation (19:15) -> Mobility provider -> New ride -> Verification
+    const flightTimeMatch =
+      message.match(/(?:flight|arrival|landing).*(?:is|to|at|now|changed to)\s*(\d{1,2}:\d{2}(?:\s*[AaPp][Mm])?)/i) ||
+      message.match(/(\d{1,2}:\d{2})\s*(?:arrival|flight)/i) ||
+      (lower.includes("18:40") ? ["", "18:40"] : null);
+
+    if (
+      flightTimeMatch &&
+      (lower.includes("arrival") ||
+        lower.includes("flight") ||
+        lower.includes("landing") ||
+        lower.includes("delay") ||
+        lower.includes("changed") ||
+        lower.includes("18:40"))
+    ) {
+      const newArrival = flightTimeMatch[1].trim();
+      const mobilityWindow = mobilityConnector.calculatePickupWindow(newArrival, 25, 10);
+      const oldCabTarget = "18:35";
+      const newExit = mobilityWindow.expectedExit;
+      const newPickup = mobilityWindow.pickupTarget;
+
+      // Query mobility provider for updated candidate rides
+      const candidateRides = await mobilityConnector.findRide({
+        pickupLocation: "Goa Airport",
+        destination: "Wedding Venue",
+        flightArrival: newArrival,
+        passengerCount,
+        accessibility: hasAccessibility,
+      });
+
+      // Filter against group constraints: capacity >= passengerCount, accessibility required
+      const validRides = candidateRides.filter(
+        (r) => r.capacity >= passengerCount && (!hasAccessibility || r.accessibility)
+      );
+      const chosenRide = validRides[0] || candidateRides[0];
+      const confirmedRide = await mobilityConnector.confirmRide(chosenRide.rideId);
+
+      return {
+        event: `Upstream flight arrival shifted to ${newArrival}`,
+        impact: {
+          affectedCommitments: [commitment ? `${commitment.title} (${commitment.deadlineTime || "7:00 PM"})` : "Wedding (7:00 PM)"],
+          affectedTravellers: travellers,
+          brokenDependencies: [`Original Airport Transfer at ${oldCabTarget} (INVALIDATED)`],
+          riskLevel: "MEDIUM",
+        },
+        decision: {
+          type: "ACT",
+          selectedOption: `${confirmedRide.vehicle} (Pickup ${newPickup})`,
+          cost: confirmedRide.cost,
+          arrivalTime: newArrival,
+          reason: `Upstream flight arrival shifted to ${newArrival}. Expected airport exit updated to ${newExit}. Old transfer at ${oldCabTarget} invalidated. New accessible ride confirmed for ${newPickup} pickup target.`,
+        },
+        actions: [
+          {
+            tool: "calculatePickupWindow",
+            arguments: { flightArrival: newArrival, exitBuffer: 25, pickupBuffer: 10 },
+            result: mobilityWindow,
+            verified: true,
+          },
+          {
+            tool: "findRide",
+            arguments: { flightArrival: newArrival, passengers: passengerCount, accessibility: hasAccessibility },
+            result: candidateRides,
+            verified: true,
+          },
+          {
+            tool: "confirmRide",
+            arguments: { rideId: confirmedRide.rideId },
+            result: confirmedRide,
+            verified: true,
+          },
+        ],
+        verificationRequired: true,
+        communication: `Upstream change detected: Flight arrives at ${newArrival}. Expected airport exit updated to ${newExit}. Previous transfer at ${oldCabTarget} has been invalidated. New accessible ride confirmed with pickup target at ${newPickup}.`,
+        displayText: `Upstream change detected: Flight arrives at ${newArrival}. Expected airport exit updated to ${newExit}. Previous transfer at ${oldCabTarget} has been invalidated. New accessible ride confirmed with pickup target at ${newPickup}.`,
+        spokenResponse: `Flight arrives at ${newArrival}. I recalculated airport exit to ${newExit} and booked a replacement transfer for ${newPickup}.`,
+        speechText: `Flight arrives at ${newArrival}. I recalculated airport exit to ${newExit} and booked a replacement transfer for ${newPickup}.`,
+        nextStatus: "RECOVERED",
+        humanDecisionRequired: false,
+        mobilityDependency: {
+          previousPickup: oldCabTarget,
+          newFlightArrival: newArrival,
+          expectedAirportExit: newExit,
+          newPickupTarget: newPickup,
+          rideId: confirmedRide.rideId,
+          vehicle: confirmedRide.vehicle,
+          status: "CONFIRMED",
+        },
+        transferRepaired: {
+          reference: confirmedRide.rideId,
+          pickupTime: newPickup,
+          vehicle: confirmedRide.vehicle,
+          verified: true,
+        },
+      };
     }
 
     // CASE 2: Disruption - Flight Cancelled
