@@ -28,8 +28,10 @@ import {
   Play,
   Check,
   ShieldCheck,
+  PlusCircle,
 } from "lucide-react";
 import { JourneyStateData } from "@/lib/agent/gemini-agent";
+import NewSimulationModal from "@/components/NewSimulationModal";
 
 interface ChatMessage {
   id: string;
@@ -49,10 +51,13 @@ export default function SoloJourneyPage() {
     },
   ]);
 
+  const [journeyCode, setJourneyCode] = useState<string>("");
+  const [journeyId, setJourneyId] = useState<string>("");
+  const [isNewSimModalOpen, setIsNewSimModalOpen] = useState(false);
+
+  // Fresh simulation starts with completely empty state
   const [journeyState, setJourneyState] = useState<JourneyStateData>({
-    autonomousAuthority: 10000,
-    budget: 10000,
-    travellers: ["You"],
+    travellers: [],
   });
 
   const [inputText, setInputText] = useState("");
@@ -67,7 +72,7 @@ export default function SoloJourneyPage() {
   const [selectedConstraintCards, setSelectedConstraintCards] = useState<string[]>([]);
   const [nonNegotiableInput, setNonNegotiableInput] = useState("");
   const [selectedPriorityCard, setSelectedPriorityCard] = useState<string>("");
-  const [authorityCard, setAuthorityCard] = useState<number>(10000);
+  const [authorityCard, setAuthorityCard] = useState<number>(0);
 
   // Recovery & Disruption state
   const [activeDisruption, setActiveDisruption] = useState<any>(null);
@@ -85,6 +90,159 @@ export default function SoloJourneyPage() {
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
+
+  // Initialize or restore journey scoped by journeyCode
+  useEffect(() => {
+    async function initSoloJourney() {
+      if (typeof window === "undefined") return;
+      const urlParams = new URLSearchParams(window.location.search);
+      const codeFromUrl = urlParams.get("code") || urlParams.get("id");
+      const storedCode = sessionStorage.getItem("wingman_solo_journey_code");
+      const targetCode = codeFromUrl || storedCode;
+
+      if (targetCode) {
+        try {
+          const res = await fetch(`/api/journey/${targetCode}`);
+          if (res.ok) {
+            const data = await res.json();
+            if (data.success && data.journey) {
+              const j = data.journey;
+              setJourneyCode(j.code);
+              setJourneyId(j.id);
+              sessionStorage.setItem("wingman_solo_journey_code", j.code);
+              if (j.destination || j.purpose) {
+                setJourneyState({
+                  destination: j.destination || undefined,
+                  origin: j.origin || undefined,
+                  objective: j.purpose || undefined,
+                  dates: j.startDate ? new Date(j.startDate).toLocaleDateString() : undefined,
+                  deadlines: j.arrivalDeadline ? [j.arrivalDeadline] : undefined,
+                  autonomousAuthority: j.authorityLimit > 0 ? j.authorityLimit : undefined,
+                  budget: j.authorityLimit > 0 ? j.authorityLimit : undefined,
+                  travellers: j.members?.length > 0 ? j.members.map((m: any) => m.user.name) : [],
+                });
+                if (j.authorityLimit > 0) setAuthorityCard(j.authorityLimit);
+                if (j.destination && j.purpose) setIsPlanReady(true);
+              }
+              return;
+            }
+          }
+        } catch (e) {
+          console.warn("Failed to load existing journey, creating fresh:", e);
+        }
+      }
+
+      // If no valid journey, create a fresh one server-side
+      try {
+        const res = await fetch("/api/journey/new", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ type: "SOLO" }),
+        });
+        const data = await res.json();
+        if (data.success) {
+          setJourneyCode(data.code);
+          setJourneyId(data.journeyId);
+          sessionStorage.setItem("wingman_solo_journey_code", data.code);
+          window.history.replaceState(null, "", `/solo?code=${data.code}`);
+        }
+      } catch (err) {
+        console.error("Failed to initialize solo journey:", err);
+      }
+    }
+
+    initSoloJourney();
+  }, []);
+
+  // Reset to fresh simulation starting from ZERO
+  const resetToFreshSimulation = async (customCode?: string, customId?: string) => {
+    let nextCode = customCode;
+    let nextId = customId;
+
+    if (!nextCode) {
+      try {
+        const res = await fetch("/api/journey/new", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ type: "SOLO" }),
+        });
+        const data = await res.json();
+        if (data.success) {
+          nextCode = data.code;
+          nextId = data.journeyId;
+        }
+      } catch (e) {
+        console.error("Error creating fresh journey on reset:", e);
+      }
+    }
+
+    if (nextCode) {
+      setJourneyCode(nextCode);
+      setJourneyId(nextId || "");
+      if (typeof window !== "undefined") {
+        sessionStorage.setItem("wingman_solo_journey_code", nextCode);
+        window.history.replaceState(null, "", `/solo?code=${nextCode}`);
+      }
+    }
+
+    // Reset all React state to ZERO
+    setMessages([
+      {
+        id: "msg-init",
+        role: "agent",
+        text: "Tell me about your journey. You can tell me everything at once, or I'll ask you a few things as we go.",
+        timestamp: "Just now",
+      },
+    ]);
+    setJourneyState({
+      travellers: [],
+    });
+    setSelectedConstraintCards([]);
+    setNonNegotiableInput("");
+    setSelectedPriorityCard("");
+    setAuthorityCard(0);
+    setIsPlanReady(false);
+    setPlanBuilt(false);
+    setActiveDisruption(null);
+    setRecoveryExecuted(false);
+    setExecutingOptionId(null);
+    setVoiceState("READY");
+    setStatusMessage("Agent Ready");
+  };
+
+  // Optional Load Demo Journey
+  const handleLoadDemo = () => {
+    setJourneyCode("ROOM-WING01");
+    if (typeof window !== "undefined") {
+      sessionStorage.setItem("wingman_solo_journey_code", "ROOM-WING01");
+      window.history.replaceState(null, "", `/solo?code=ROOM-WING01`);
+    }
+    setJourneyState({
+      destination: "Goa",
+      origin: "Hyderabad",
+      objective: "Sister's Wedding Ceremony",
+      dates: "December 21",
+      deadlines: ["6:00 PM"],
+      travellers: ["Rahul", "Meera", "Arjun", "Sara", "Kabir"],
+      autonomousAuthority: 10000,
+      budget: 10000,
+      accessibilityRequirements: ["Wheelchair & ramp assistance required"],
+      hardConstraints: ["Group must remain together throughout all transfers"],
+    });
+    setAuthorityCard(10000);
+    setSelectedConstraintCards(["Wheelchair assistance required", "Must stay together as family"]);
+    setSelectedPriorityCard("ARRIVE_BEFORE_DEADLINE");
+    setIsPlanReady(true);
+    setPlanBuilt(true);
+    setMessages([
+      {
+        id: "msg-demo-1",
+        role: "agent",
+        text: "Loaded active demo journey: Goa Wedding for Rahul, Meera, and family. Everything is protected.",
+        timestamp: "Just now",
+      },
+    ]);
+  };
 
   // Initial welcome speech on first user click or load using Gnani Timbre 2.5
   const playTts = useCallback(
@@ -316,6 +474,7 @@ export default function SoloJourneyPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           action,
+          journeyCode: journeyCode || undefined,
           currentState: journeyState,
           message: cleanText,
           history: messages.map((m) => ({ role: m.role, text: m.text })),
@@ -329,6 +488,9 @@ export default function SoloJourneyPage() {
 
       const result = data.interviewResult;
       setJourneyState(result.updatedState);
+      if (result.updatedState.autonomousAuthority) {
+        setAuthorityCard(result.updatedState.autonomousAuthority);
+      }
 
       if (result.isReady) {
         setIsPlanReady(true);
@@ -549,7 +711,24 @@ export default function SoloJourneyPage() {
           </div>
         </div>
 
-        <div className="flex items-center space-x-3">
+        <div className="flex items-center space-x-2.5">
+          <button
+            onClick={() => setIsNewSimModalOpen(true)}
+            className="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-bold transition text-xs flex items-center gap-1.5 shadow-md shadow-indigo-950/60"
+            title="Start fresh simulation from zero"
+          >
+            <PlusCircle className="w-3.5 h-3.5" />
+            <span>+ NEW SIMULATION</span>
+          </button>
+
+          <button
+            onClick={handleLoadDemo}
+            className="px-2.5 py-1.5 rounded-lg border border-zinc-800 hover:border-zinc-700 bg-zinc-900/60 hover:bg-zinc-800 text-zinc-400 hover:text-white transition text-xs font-mono"
+            title="Load pre-seeded Goa Wedding demo"
+          >
+            Load Demo
+          </button>
+
           <button
             onClick={() => setIsAudioMuted(!isAudioMuted)}
             className="p-2 rounded-lg border border-zinc-800 hover:border-zinc-700 text-zinc-400 hover:text-white transition text-xs flex items-center gap-1.5"
@@ -1241,6 +1420,14 @@ export default function SoloJourneyPage() {
           )}
         </div>
       </main>
+
+      {/* Fresh Simulation Modal */}
+      <NewSimulationModal
+        isOpen={isNewSimModalOpen}
+        onClose={() => setIsNewSimModalOpen(false)}
+        onConfirm={(newJ) => resetToFreshSimulation(newJ.code, newJ.journeyId)}
+        defaultType="SOLO"
+      />
     </div>
   );
 }

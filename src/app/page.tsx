@@ -19,13 +19,27 @@ import {
   Radio,
   X,
   Compass,
+  PlusCircle,
+  Play,
+  RotateCcw,
 } from "lucide-react";
+import NewSimulationModal from "@/components/NewSimulationModal";
 
 export default function LandingPage() {
   const router = useRouter();
   const [isTryModalOpen, setIsTryModalOpen] = useState(false);
   const [isJoinModalOpen, setIsJoinModalOpen] = useState(false);
+  const [isNewSimModalOpen, setIsNewSimModalOpen] = useState(false);
+  const [activeSavedCode, setActiveSavedCode] = useState<string | null>(null);
   const [roomCodeInput, setRoomCodeInput] = useState("");
+
+  // Detect if an existing journey was active
+  useState(() => {
+    if (typeof window !== "undefined") {
+      const code = localStorage.getItem("wingman_active_journey_code") || sessionStorage.getItem("wingman_solo_journey_code");
+      if (code) setActiveSavedCode(code);
+    }
+  });
 
   const handleJoinSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -68,6 +82,13 @@ export default function LandingPage() {
             What it protects
           </a>
           <button
+            onClick={() => setIsNewSimModalOpen(true)}
+            className="text-xs font-bold px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white transition flex items-center gap-1.5 shadow-md shadow-indigo-950/60"
+          >
+            <PlusCircle className="w-3.5 h-3.5" />
+            <span>+ NEW SIMULATION</span>
+          </button>
+          <button
             onClick={() => setIsJoinModalOpen(true)}
             className="text-xs font-mono px-3.5 py-1.5 rounded-lg border border-zinc-800 hover:border-zinc-700 text-zinc-300 hover:text-white transition"
           >
@@ -96,23 +117,31 @@ export default function LandingPage() {
           &ldquo;Tell Wingman where you&apos;re going, what matters, and what you&apos;re unwilling to compromise on. It builds and protects your journey as things change.&rdquo;
         </p>
 
-        {/* Primary CTA Buttons */}
+        {/* Primary CTA Buttons: NEW SIMULATION is the default; DEMO is an explicit option */}
         <div className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-6">
           <button
-            onClick={() => setIsTryModalOpen(true)}
+            onClick={() => setIsNewSimModalOpen(true)}
             className="w-full sm:w-auto px-9 py-4 rounded-xl bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 hover:to-indigo-400 text-base font-bold text-white shadow-xl shadow-indigo-950/80 transition flex items-center justify-center gap-3 group border border-indigo-400/30"
           >
-            <Mic className="w-5 h-5 text-indigo-200 group-hover:scale-110 transition" />
-            <span>TRY WINGMAN</span>
+            <PlusCircle className="w-5 h-5 text-indigo-200 group-hover:scale-110 transition" />
+            <span>NEW SIMULATION</span>
             <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition" />
           </button>
 
-          <a
-            href="#how-it-works"
-            className="w-full sm:w-auto px-8 py-4 rounded-xl bg-zinc-900/90 hover:bg-zinc-800 text-sm font-semibold text-zinc-200 border border-zinc-800 hover:border-zinc-700 transition flex items-center justify-center"
+          <button
+            onClick={() => setIsTryModalOpen(true)}
+            className="w-full sm:w-auto px-7 py-4 rounded-xl bg-zinc-900/90 hover:bg-zinc-800 text-sm font-semibold text-zinc-200 border border-zinc-800 hover:border-zinc-700 transition flex items-center justify-center gap-2"
           >
-            <span>HOW IT WORKS</span>
-          </a>
+            <Mic className="w-4 h-4 text-indigo-400" />
+            <span>TRY WINGMAN</span>
+          </button>
+
+          <Link
+            href="/journey/ROOM-WING01"
+            className="w-full sm:w-auto px-6 py-4 rounded-xl bg-zinc-900/60 hover:bg-zinc-800 text-sm font-mono text-zinc-400 hover:text-white border border-zinc-800 transition flex items-center justify-center gap-2"
+          >
+            <span>LOAD DEMO</span>
+          </Link>
         </div>
 
         {/* Quick Demo Access Pill */}
@@ -312,19 +341,19 @@ export default function LandingPage() {
                   setIsTryModalOpen(false);
                   router.push("/solo");
                 }}
-                className="p-6 rounded-2xl bg-zinc-900/80 border border-zinc-800 hover:border-indigo-500 hover:bg-indigo-950/20 text-left transition group space-y-3"
+                className="p-5 rounded-2xl bg-zinc-900/80 border border-zinc-800 hover:border-indigo-500 hover:bg-indigo-950/20 text-left transition group space-y-2.5"
               >
-                <div className="w-12 h-12 rounded-xl bg-indigo-500/10 border border-indigo-500/30 flex items-center justify-center text-indigo-400 group-hover:scale-105 transition">
-                  <Mic className="w-6 h-6" />
+                <div className="w-10 h-10 rounded-xl bg-indigo-500/10 border border-indigo-500/30 flex items-center justify-center text-indigo-400 group-hover:scale-105 transition">
+                  <Mic className="w-5 h-5" />
                 </div>
                 <div>
-                  <h4 className="text-lg font-bold text-white group-hover:text-indigo-300 transition">SOLO</h4>
+                  <h4 className="text-base font-bold text-white group-hover:text-indigo-300 transition">SOLO</h4>
                   <p className="text-xs text-zinc-400 mt-1 leading-relaxed">
-                    Voice-first 1-on-1 interview with Wingman. Tell it what you&apos;re trying to do in natural speech.
+                    Voice-first 1-on-1 interview with Wingman. Starts completely empty.
                   </p>
                 </div>
                 <div className="text-xs font-semibold text-indigo-400 flex items-center gap-1 pt-1">
-                  <span>Start voice interview</span>
+                  <span>Start fresh voice interview</span>
                   <ChevronRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition" />
                 </div>
               </button>
@@ -335,26 +364,67 @@ export default function LandingPage() {
                   setIsTryModalOpen(false);
                   router.push("/group");
                 }}
-                className="p-6 rounded-2xl bg-zinc-900/80 border border-zinc-800 hover:border-purple-500 hover:bg-purple-950/20 text-left transition group space-y-3"
+                className="p-5 rounded-2xl bg-zinc-900/80 border border-zinc-800 hover:border-purple-500 hover:bg-purple-950/20 text-left transition group space-y-2.5"
               >
-                <div className="w-12 h-12 rounded-xl bg-purple-500/10 border border-purple-500/30 flex items-center justify-center text-purple-400 group-hover:scale-105 transition">
-                  <Users className="w-6 h-6" />
+                <div className="w-10 h-10 rounded-xl bg-purple-500/10 border border-purple-500/30 flex items-center justify-center text-purple-400 group-hover:scale-105 transition">
+                  <Users className="w-5 h-5" />
                 </div>
                 <div>
-                  <h4 className="text-lg font-bold text-white group-hover:text-purple-300 transition">GROUP</h4>
+                  <h4 className="text-base font-bold text-white group-hover:text-purple-300 transition">GROUP</h4>
                   <p className="text-xs text-zinc-400 mt-1 leading-relaxed">
-                    Create a group journey, share a WhatsApp link, and invite members to enter their individual constraints.
+                    Create a fresh group journey, share a WhatsApp invite link with a unique room code.
                   </p>
                 </div>
                 <div className="text-xs font-semibold text-purple-400 flex items-center gap-1 pt-1">
-                  <span>Create group link</span>
+                  <span>Create group room</span>
                   <ChevronRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition" />
                 </div>
               </button>
             </div>
+
+            {/* Quick Actions Footer inside modal */}
+            <div className="pt-4 border-t border-zinc-800/80 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
+              <button
+                onClick={() => {
+                  setIsTryModalOpen(false);
+                  setIsNewSimModalOpen(true);
+                }}
+                className="font-bold text-indigo-400 hover:text-indigo-300 flex items-center gap-1.5 transition"
+              >
+                <PlusCircle className="w-4 h-4" />
+                <span>+ Start Fresh Simulation</span>
+              </button>
+
+              {activeSavedCode && (
+                <button
+                  onClick={() => {
+                    setIsTryModalOpen(false);
+                    router.push(activeSavedCode.startsWith("WG-") || activeSavedCode.startsWith("ROOM-") ? `/journey/${activeSavedCode}` : `/solo?code=${activeSavedCode}`);
+                  }}
+                  className="font-mono text-zinc-300 hover:text-white flex items-center gap-1.5 transition"
+                >
+                  <RotateCcw className="w-3.5 h-3.5 text-zinc-400" />
+                  <span>Continue Saved Journey ({activeSavedCode})</span>
+                </button>
+              )}
+
+              <Link
+                href="/journey/ROOM-WING01"
+                onClick={() => setIsTryModalOpen(false)}
+                className="font-mono text-zinc-500 hover:text-indigo-300 transition"
+              >
+                Load Demo Scenario &rarr;
+              </Link>
+            </div>
           </div>
         </div>
       )}
+
+      {/* New Simulation Modal */}
+      <NewSimulationModal
+        isOpen={isNewSimModalOpen}
+        onClose={() => setIsNewSimModalOpen(false)}
+      />
 
       {/* Modal: Join Code Prompt */}
       {isJoinModalOpen && (

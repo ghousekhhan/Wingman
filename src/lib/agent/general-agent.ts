@@ -77,8 +77,13 @@ export class GeneralWingmanAgent {
     const { journeyCode, message, speaker = "Rahul", userApprovalGranted, approvedAmount } = params;
 
     // 1. UNDERSTAND - Load current Journey State
-    const journey = await prisma.journey.findUnique({
-      where: { code: journeyCode },
+    const journey = await prisma.journey.findFirst({
+      where: {
+        OR: [
+          { code: journeyCode },
+          { id: journeyCode },
+        ],
+      },
       include: {
         members: {
           include: {
@@ -143,8 +148,13 @@ export class GeneralWingmanAgent {
     });
 
     // 3. Return refreshed Journey State
-    const updatedJourney = await prisma.journey.findUnique({
-      where: { code: journeyCode },
+    const updatedJourney = await prisma.journey.findFirst({
+      where: {
+        OR: [
+          { code: journeyCode },
+          { id: journeyCode },
+        ],
+      },
       include: {
         members: {
           include: {
@@ -257,8 +267,8 @@ export class GeneralWingmanAgent {
 
       // Query mobility provider for updated candidate rides
       const candidateRides = await mobilityConnector.findRide({
-        pickupLocation: "Goa Airport",
-        destination: "Wedding Venue",
+        pickupLocation: `${journey.destination || "Airport"}`,
+        destination: commitment?.title || journey.purpose || "Destination Venue",
         flightArrival: newArrival,
         passengerCount,
         accessibility: hasAccessibility,
@@ -837,7 +847,7 @@ export class GeneralWingmanAgent {
       },
       actions: [],
       verificationRequired: false,
-      communication: `Understood, ${speaker}. I am holding your journey state: 5 travellers, destination ${journey.destination}, arrival deadline ${journey.arrivalDeadline}, and ₹${journey.authorityLimit.toLocaleString("en-IN")} authority. Everything is protected.`,
+      communication: `Understood, ${speaker}. I am holding your journey state: ${passengerCount} traveller${passengerCount > 1 ? "s" : ""}, destination ${journey.destination || "TBD"}, arrival deadline ${journey.arrivalDeadline || "TBD"}, and ₹${journey.authorityLimit.toLocaleString("en-IN")} authority. Everything is protected.`,
       nextStatus: journey.status as any,
       humanDecisionRequired: false,
     };
@@ -981,7 +991,7 @@ UNDERSTAND → PLAN → COMMIT → MONITOR → PROTECT → RECOVER → VERIFY �
 When interpreting a prompt:
 1. Understand what changed or what the user is instructing.
 2. Identify affected commitments and deadlines.
-3. Identify affected travellers and individual constraints (e.g. Meera requires accessibility and cannot travel alone; all 5 stay together).
+3. Identify affected travellers and individual constraints from currentJourneyState.
 4. Evaluate autonomous spending authority (limit: ₹${journey.authorityLimit}).
 5. Never exceed autonomous authority without human approval.
 6. When a flight is cancelled, recognize that dependent ground transfers are invalidated and must also be repaired.

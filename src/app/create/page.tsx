@@ -26,12 +26,12 @@ export default function CreateJourneyPage() {
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
 
-  // Conversational Answers
-  const [destination, setDestination] = useState("Goa");
-  const [purpose, setPurpose] = useState("My sister's wedding");
-  const [eventTime, setEventTime] = useState("December 21 at 7 PM");
-  const [arrivalTime, setArrivalTime] = useState("Before 6 PM");
-  const [travellersInput, setTravellersInput] = useState("Rahul, Meera, Arjun, Sara, Kabir");
+  // Conversational Answers - genuinely starts empty
+  const [destination, setDestination] = useState("");
+  const [purpose, setPurpose] = useState("");
+  const [eventTime, setEventTime] = useState("");
+  const [arrivalTime, setArrivalTime] = useState("");
+  const [travellersInput, setTravellersInput] = useState("");
 
   // Generated Room Result
   const [createdRoomCode, setCreatedRoomCode] = useState<string | null>(null);
@@ -41,45 +41,34 @@ export default function CreateJourneyPage() {
   const handleFinalize = async () => {
     setLoading(true);
     try {
-      // Generate clean room code e.g. WINGMAN-7X42
-      const randomChars = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ";
-      let codeSuffix = "";
-      for (let i = 0; i < 4; i++) {
-        codeSuffix += randomChars.charAt(Math.floor(Math.random() * randomChars.length));
-      }
-      const generatedCode = `WINGMAN-${codeSuffix}`;
+      // Generate clean room code e.g. WG-7391
+      const randNum = Math.floor(1000 + Math.random() * 9000);
+      const generatedCode = `WG-${randNum}`;
 
-      const travellersList = travellersInput
-        .split(/[,;\n]+/)
-        .map((t) => t.trim())
-        .filter(Boolean);
-
-      const res = await fetch("/api/journey", {
+      const res = await fetch("/api/journey/new", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          code: generatedCode,
-          destination: destination.trim() || "Goa",
-          commitment: purpose.trim() || "Sister's Wedding",
-          arrivalDeadline: arrivalTime.trim() || "6:00 PM",
-          leadName: travellersList[0] || "Rahul",
-          travellers: travellersList.length > 0 ? travellersList : ["Rahul", "Meera", "Arjun", "Sara", "Kabir"],
-          authorityLimit: 10000,
+          type: "GROUP",
+          title: purpose.trim() || `${destination.trim() || "Group"} Journey`,
         }),
       });
 
       const data = await res.json();
       if (data.success) {
-        setCreatedRoomCode(generatedCode);
+        setCreatedRoomCode(data.code);
+        if (typeof window !== "undefined") {
+          localStorage.setItem("wingman_active_journey_code", data.code);
+        }
         setStep(6); // Move to invite link display screen
       } else {
-        // Fallback
-        setCreatedRoomCode("ROOM-WING01");
+        setCreatedRoomCode(generatedCode);
         setStep(6);
       }
     } catch (e) {
       console.error("Create journey error:", e);
-      setCreatedRoomCode("ROOM-WING01");
+      const randNum = Math.floor(1000 + Math.random() * 9000);
+      setCreatedRoomCode(`WG-${randNum}`);
       setStep(6);
     } finally {
       setLoading(false);

@@ -19,11 +19,13 @@ import {
   ArrowRight,
   ShieldCheck,
   Volume2,
-  X,
   Sparkles,
+  PlusCircle,
+  X,
 } from "lucide-react";
 import SiriVoiceOverlay from "@/components/SiriVoiceOverlay";
 import HumanDecisionView, { DecisionOption } from "@/components/HumanDecisionView";
+import NewSimulationModal from "@/components/NewSimulationModal";
 
 export default function JourneyHomePage({ params }: { params: { code: string } }) {
   const roomCode = params.code || "ROOM-WING01";
@@ -50,6 +52,7 @@ export default function JourneyHomePage({ params }: { params: { code: string } }
   // Simulation & Modal state
   const [isSimulationOpen, setIsSimulationOpen] = useState(false);
   const [isDecisionOpen, setIsDecisionOpen] = useState(false);
+  const [isNewSimModalOpen, setIsNewSimModalOpen] = useState(false);
   const [selectedPerson, setSelectedPerson] = useState<any>(null);
 
   // Load Journey State
@@ -59,6 +62,16 @@ export default function JourneyHomePage({ params }: { params: { code: string } }
       const data = await res.json();
       if (data.success && data.journey) {
         setJourney(data.journey);
+        if (typeof window !== "undefined") {
+          localStorage.setItem("wingman_active_journey_code", data.journey.code);
+        }
+        if (data.journey.members && data.journey.members.length > 0) {
+          setCompletedIntakeCount(data.journey.members.length);
+          setGroupPlanBuilt(true);
+        } else {
+          setCompletedIntakeCount(0);
+          setGroupPlanBuilt(false);
+        }
         if (data.journey.status === "DECISION_REQUIRED") {
           setIsDecisionOpen(true);
         }
@@ -190,8 +203,27 @@ export default function JourneyHomePage({ params }: { params: { code: string } }
             ))}
           </nav>
 
-          {/* Controls: Voice Agent & Simulation */}
-          <div className="flex items-center space-x-2.5">
+          {/* Controls: Voice Agent, Simulation, + NEW SIMULATION */}
+          <div className="flex items-center space-x-2">
+            <button
+              onClick={() => setIsNewSimModalOpen(true)}
+              className="px-2.5 py-1 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-xs font-bold text-white flex items-center gap-1 transition shadow shadow-indigo-950/60"
+              title="Start fresh simulation from zero"
+            >
+              <PlusCircle className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">+ NEW SIMULATION</span>
+            </button>
+
+            {roomCode !== "ROOM-WING01" && (
+              <Link
+                href="/journey/ROOM-WING01"
+                className="px-2 py-1 rounded-lg border border-zinc-800 hover:border-zinc-700 bg-zinc-900/60 hover:bg-zinc-800 text-xs font-mono text-zinc-400 hover:text-white transition"
+                title="Load pre-seeded Goa Wedding demo"
+              >
+                Load Demo
+              </Link>
+            )}
+
             <button
               onClick={() => setIsSiriOpen(true)}
               className="px-2.5 py-1 rounded-lg bg-indigo-950/80 border border-indigo-700/60 hover:bg-indigo-900/80 text-xs font-medium text-indigo-300 flex items-center gap-1.5 transition shadow"
@@ -221,16 +253,51 @@ export default function JourneyHomePage({ params }: { params: { code: string } }
             {/* Journey Title Banner (Section 15) */}
             <div className="text-center space-y-2 pt-2">
               <h1 className="text-3xl sm:text-5xl font-extrabold tracking-tight">
-                {journey?.title?.toUpperCase() || "GOA FAMILY WEDDING"}
+                {journey?.title?.toUpperCase() || (roomCode.startsWith("ROOM-") ? "GOA FAMILY WEDDING" : "NEW GROUP JOURNEY")}
               </h1>
               <div className="flex items-center justify-center gap-3 text-xs font-mono text-zinc-400">
-                <span className="font-bold text-white uppercase">{journey?.members?.length || 5} TRAVELLERS</span>
+                <span className="font-bold text-white uppercase">{journey?.members?.length ?? 0} TRAVELLERS</span>
                 <span>•</span>
-                <span className="text-emerald-400 font-bold uppercase">5 COMMITMENTS PROTECTED</span>
+                <span className="text-emerald-400 font-bold uppercase">{journey?.commitments?.length ?? 0} COMMITMENTS</span>
                 <span>•</span>
-                <span>Autonomous Authority: ₹{journey?.authorityLimit?.toLocaleString("en-IN") || "10,000"}</span>
+                <span>Autonomous Authority: ₹{(journey?.authorityLimit || 0).toLocaleString("en-IN")}</span>
               </div>
             </div>
+
+            {/* Empty bookings state for freshly created group */}
+            {journey?.bookings && journey.bookings.length === 0 && (
+              <div className="p-8 rounded-3xl border border-zinc-800 bg-[#0e1017] text-center space-y-4">
+                <div className="w-12 h-12 rounded-2xl bg-indigo-600/20 border border-indigo-500/30 flex items-center justify-center text-indigo-400 mx-auto">
+                  <Shield className="w-6 h-6" />
+                </div>
+                <div className="space-y-1">
+                  <h3 className="text-lg font-bold text-white">Fresh Group Room Active: {roomCode}</h3>
+                  <p className="text-xs text-zinc-400 max-w-md mx-auto leading-relaxed">
+                    Wingman is waiting for travellers to join and submit their commitments and constraints before constructing the dependency timeline.
+                  </p>
+                </div>
+                <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
+                  <button
+                    onClick={() => {
+                      if (typeof window !== "undefined") {
+                        navigator.clipboard.writeText(`${window.location.origin}/join/${roomCode}`);
+                        alert(`WhatsApp invite link copied:\n${window.location.origin}/join/${roomCode}`);
+                      }
+                    }}
+                    className="px-4 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-xs font-bold text-white transition flex items-center gap-2"
+                  >
+                    <Users className="w-4 h-4" />
+                    <span>Copy WhatsApp Invite Link</span>
+                  </button>
+                  <Link
+                    href={`/join/${roomCode}`}
+                    className="px-4 py-2.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-xs font-mono text-zinc-300 transition"
+                  >
+                    Enter My Constraints &rarr;
+                  </Link>
+                </div>
+              </div>
+            )}
 
             {/* Section 15 & 16: EVERY TRAVELLER MUST COMPLETE INTAKE */}
             {completedIntakeCount < 5 && (
@@ -305,7 +372,9 @@ export default function JourneyHomePage({ params }: { params: { code: string } }
             )}
 
             {/* Simple Journey Timeline: HYDERABAD ↓ FLIGHT ↓ GOA ↓ TRANSFER ↓ HOTEL ↓ WEDDING */}
-            <div className="p-5 rounded-2xl border border-zinc-800/80 bg-[#0e1017] space-y-4">
+            {(!journey?.bookings || journey.bookings.length > 0) && (
+              <>
+                <div className="p-5 rounded-2xl border border-zinc-800/80 bg-[#0e1017] space-y-4">
               <div className="flex items-center justify-between text-[11px] font-mono text-zinc-500">
                 <span>DEPENDENCY SEQUENCE</span>
                 <span className={status === "RECOVERED" ? "text-emerald-400" : "text-zinc-400"}>
@@ -500,10 +569,11 @@ export default function JourneyHomePage({ params }: { params: { code: string } }
                   <div className="text-zinc-300">Expected Exit: <strong className="text-white">17:45</strong></div>
                   <div className="text-zinc-300">Traveller Exited: <strong className="text-white">17:48</strong></div>
                   <div className="text-zinc-300">Driver Notified: <strong className="text-white">17:49</strong></div>
-                  <div className="text-emerald-400 font-bold">Passenger Picked Up: 17:52 &rarr; ETA Venue: 18:35</div>
                 </div>
               </div>
             </div>
+          </>
+        )}
 
             {/* HUMAN DECISION UI (Sections 10, 11, 13, 14) */}
             {activeDisruptionForDecision && (
@@ -698,6 +768,16 @@ export default function JourneyHomePage({ params }: { params: { code: string } }
               </span>
             </div>
 
+            {(!journey?.activityLogs || journey.activityLogs.length === 0) && (
+              <div className="p-8 rounded-2xl border border-zinc-800 bg-[#0e1017] text-center space-y-2">
+                <Clock className="w-8 h-8 text-zinc-600 mx-auto" />
+                <h3 className="text-sm font-bold text-white">No Activity Logs Yet</h3>
+                <p className="text-xs text-zinc-500 max-w-sm mx-auto">
+                  When Wingman monitors transport, detects disruptions, or verifies recoveries, chronological events will appear here.
+                </p>
+              </div>
+            )}
+
             <div className="space-y-3">
               {[...(journey?.activityLogs || [])]
                 .reverse()
@@ -727,7 +807,7 @@ export default function JourneyHomePage({ params }: { params: { code: string } }
           <div className="space-y-4 animate-in fade-in duration-200">
             <div className="flex items-center justify-between pb-3 border-b border-zinc-800">
               <div>
-                <h2 className="text-base font-bold text-white">Travellers & Individual Constraints</h2>
+                <h2 className="text-base font-bold text-white">Travellers &amp; Individual Constraints</h2>
                 <p className="text-xs text-zinc-400">Wingman coordinates each person as an individual.</p>
               </div>
               <Link
@@ -737,6 +817,28 @@ export default function JourneyHomePage({ params }: { params: { code: string } }
                 + Join as New Person
               </Link>
             </div>
+
+            {(!journey?.members || journey.members.length === 0) && (
+              <div className="p-8 rounded-2xl border border-zinc-800 bg-[#0e1017] text-center space-y-3">
+                <Users className="w-8 h-8 text-zinc-600 mx-auto" />
+                <h3 className="text-sm font-bold text-white">No Travellers Joined Yet</h3>
+                <p className="text-xs text-zinc-500 max-w-sm mx-auto">
+                  Share this room code ({roomCode}) or WhatsApp link to invite travellers to enter their individual constraints.
+                </p>
+                <button
+                  onClick={() => {
+                    if (typeof window !== "undefined") {
+                      navigator.clipboard.writeText(`${window.location.origin}/join/${roomCode}`);
+                      alert(`WhatsApp invite link copied:\n${window.location.origin}/join/${roomCode}`);
+                    }
+                  }}
+                  className="px-3.5 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-xs font-bold text-white transition inline-flex items-center gap-1.5"
+                >
+                  <Users className="w-3.5 h-3.5" />
+                  <span>Copy WhatsApp Invite Link</span>
+                </button>
+              </div>
+            )}
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {journey?.members?.map((m: any) => {
@@ -959,6 +1061,13 @@ export default function JourneyHomePage({ params }: { params: { code: string } }
           const result = await handleSendMessage(text);
           return result?.spokenResponse || result?.communication;
         }}
+      />
+
+      {/* 9. NEW SIMULATION MODAL */}
+      <NewSimulationModal
+        isOpen={isNewSimModalOpen}
+        onClose={() => setIsNewSimModalOpen(false)}
+        defaultType="GROUP"
       />
     </div>
   );
