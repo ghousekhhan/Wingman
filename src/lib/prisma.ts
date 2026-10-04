@@ -4,14 +4,20 @@ const globalForPrisma = globalThis as unknown as {
   prisma?: PrismaClient;
 };
 
-function createPrisma() {
-  return new PrismaClient({
-    log: ["warn", "error"],
-  });
+function getPrisma(): PrismaClient {
+  if (!globalForPrisma.prisma) {
+    globalForPrisma.prisma = new PrismaClient({
+      log: ["warn", "error"],
+    });
+  }
+
+  return globalForPrisma.prisma;
 }
 
-export const prisma =
-  globalForPrisma.prisma ??
-  (globalForPrisma.prisma = createPrisma());
+export const prisma = new Proxy({} as PrismaClient, {
+  get(_target, property) {
+    return Reflect.get(getPrisma(), property);
+  },
+});
 
 export default prisma;
