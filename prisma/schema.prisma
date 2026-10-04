@@ -1,0 +1,296 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String          @id @default(cuid())
+  name         String
+  role         String          @default("Traveller")
+  email        String?         @unique
+  avatarUrl    String?
+  memberships  JourneyMember[]
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+}
+
+model Journey {
+  id                  String             @id @default(cuid())
+  code                String             @unique // e.g. ROOM-WING01
+  title               String             // Goa Wedding
+  destination         String             // Goa
+  origin              String             @default("Hyderabad")
+  startDate           DateTime
+  endDate             DateTime?
+  arrivalDeadline     String             // 6:00 PM
+  status              String             @default("MONITORING") // MONITORING, ANALYZING, RECOVERING, VERIFYING, RECOVERED, DECISION_REQUIRED
+  purpose             String             @default("Sister's Wedding")
+  groupConstraint     String             @default("Everyone stays together")
+  authorityLimit      Float              @default(10000) // ₹10,000
+  members             JourneyMember[]
+  commitments         Commitment[]
+  bookings            Booking[]
+  dependencies        JourneyDependency[]
+  recoveryCases       RecoveryCase[]
+  events              JourneyEvent[]
+  activityLogs        AgentActivityLog[]
+  connectorCalls      ConnectorCall[]
+  payments            Payment[]
+  shipments           Shipment[]
+  notifications       Notification[]
+  messages            Message[]
+  voiceEvents         VoiceEvent[]
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
+}
+
+model JourneyMember {
+  id                   String        @id @default(cuid())
+  journeyId            String
+  journey              Journey       @relation(fields: [journeyId], references: [id], onDelete: Cascade)
+  userId               String
+  user                 User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role                 String        // Lead traveller, Grandmother, Family member
+  isLead               Boolean       @default(false)
+  individualAuthority  Float         @default(10000)
+  constraints          Constraint[]
+  preferences          Preference[]
+  createdAt            DateTime      @default(now())
+  updatedAt            DateTime      @updatedAt
+
+  @@unique([journeyId, userId])
+}
+
+model Constraint {
+  id           String         @id @default(cuid())
+  memberId     String
+  member       JourneyMember  @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  type         String         // CANNOT_TRAVEL_ALONE, MUST_STAY_WITH_GROUP, ACCESSIBILITY_REQUIRED, ARRIVE_ON_TIME, etc.
+  title        String
+  description  String?
+  isHard       Boolean        @default(true)
+  createdAt    DateTime       @default(now())
+}
+
+model Preference {
+  id           String         @id @default(cuid())
+  memberId     String
+  member       JourneyMember  @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  category     String         // SEATING, MEAL, NOTIFICATION
+  value        String
+  createdAt    DateTime       @default(now())
+}
+
+model Commitment {
+  id           String         @id @default(cuid())
+  journeyId    String
+  journey      Journey        @relation(fields: [journeyId], references: [id], onDelete: Cascade)
+  title        String         // Sister's Wedding
+  scheduledAt  DateTime
+  deadlineTime String         // 6:00 PM
+  isProtected  Boolean        @default(true)
+  status       String         @default("CONFIRMED")
+  description  String?
+  createdAt    DateTime       @default(now())
+}
+
+model Booking {
+  id                String              @id @default(cuid())
+  journeyId         String
+  journey           Journey             @relation(fields: [journeyId], references: [id], onDelete: Cascade)
+  type              String              // FLIGHT, TRANSFER, HOTEL
+  referenceCode     String              // 6E-542, GOA-CAB-88, etc.
+  provider          String              // IndiGo, GoaMobility, Marriott
+  title             String              // Hyderabad → Goa Flight
+  detailsJson       String              // JSON with departure, arrival, seats, accessibility
+  status            String              @default("CONFIRMED") // CONFIRMED, CANCELLED, REPLACED, PENDING
+  fromDependencies  JourneyDependency[] @relation("FromBooking")
+  toDependencies    JourneyDependency[] @relation("ToBooking")
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+}
+
+model JourneyDependency {
+  id             String    @id @default(cuid())
+  journeyId      String
+  journey        Journey   @relation(fields: [journeyId], references: [id], onDelete: Cascade)
+  fromBookingId  String?
+  fromBooking    Booking?  @relation("FromBooking", fields: [fromBookingId], references: [id], onDelete: Cascade)
+  toBookingId    String?
+  toBooking      Booking?  @relation("ToBooking", fields: [toBookingId], references: [id], onDelete: Cascade)
+  description    String    // e.g. "Airport transfer depends on flight arrival"
+  order          Int       @default(0)
+  createdAt      DateTime  @default(now())
+}
+
+model JourneyEvent {
+  id           String    @id @default(cuid())
+  journeyId    String
+  journey      Journey   @relation(fields: [journeyId], references: [id], onDelete: Cascade)
+  eventType    String    // FLIGHT_CANCELLED, FLIGHT_DELAYED, etc.
+  description  String
+  payloadJson  String?
+  timestamp    DateTime  @default(now())
+}
+
+model RecoveryCase {
+  id                    String            @id @default(cuid())
+  caseNumber            String            @unique // RC-001
+  journeyId             String
+  journey               Journey           @relation(fields: [journeyId], references: [id], onDelete: Cascade)
+  triggerEvent          String
+  status                String            @default("ANALYZING") // ANALYZING, RECOVERING, VERIFYING, RECOVERED, DECISION_REQUIRED
+  affectedTravellersJson String           // list of names/roles
+  affectedCommitmentsJson String          // commitments at risk
+  options               RecoveryOption[]
+  selectedOptionId      String?
+  humanDecisionRequired Boolean           @default(false)
+  humanQuestion         String?
+  decisions             AgentDecision[]
+  actions               AgentAction[]
+  createdAt             DateTime          @default(now())
+  updatedAt             DateTime          @updatedAt
+}
+
+model RecoveryOption {
+  id                    String        @id @default(cuid())
+  recoveryCaseId        String
+  recoveryCase          RecoveryCase  @relation(fields: [recoveryCaseId], references: [id], onDelete: Cascade)
+  optionLabel           String        // Option A, Option B, etc.
+  cost                  Float         // ₹6,400
+  arrivalTime           String        // 5:20 PM
+  passengersTogether    Int           // 5
+  accessibilityAvailable Boolean      @default(true)
+  satisfiesDeadline     Boolean       @default(true)
+  satisfiesGroup        Boolean       @default(true)
+  satisfiesAuthority    Boolean       @default(true)
+  detailsJson           String
+  rejectionReason       String?
+  isSelected            Boolean       @default(false)
+  createdAt             DateTime      @default(now())
+}
+
+model AgentDecision {
+  id             String        @id @default(cuid())
+  recoveryCaseId String
+  recoveryCase   RecoveryCase  @relation(fields: [recoveryCaseId], references: [id], onDelete: Cascade)
+  summary        String
+  why            String
+  authorityCheck String        // e.g. "₹6,400 <= ₹10,000: Authorized"
+  constraintCheck String
+  createdAt      DateTime      @default(now())
+}
+
+model AgentAction {
+  id                  String               @id @default(cuid())
+  recoveryCaseId      String
+  recoveryCase        RecoveryCase         @relation(fields: [recoveryCaseId], references: [id], onDelete: Cascade)
+  stage               String               // RECOVER, VERIFY, DOWNSTREAM_RECOVER
+  connector           String               // PASSENGER_TRAVEL, MOBILITY, PINE_LABS
+  actionType          String               // BOOK_FLIGHT, BOOK_TRANSFER, EXECUTE_PAYMENT
+  status              String               @default("PENDING") // PENDING, EXECUTED, VERIFIED, FAILED
+  resultJson          String?
+  verificationResults VerificationResult[]
+  createdAt           DateTime             @default(now())
+}
+
+model VerificationResult {
+  id             String       @id @default(cuid())
+  agentActionId  String
+  agentAction    AgentAction  @relation(fields: [agentActionId], references: [id], onDelete: Cascade)
+  verified       Boolean
+  confirmationId String?
+  details        String
+  timestamp      DateTime     @default(now())
+}
+
+model AgentActivityLog {
+  id                 String    @id @default(cuid())
+  journeyId          String
+  journey            Journey   @relation(fields: [journeyId], references: [id], onDelete: Cascade)
+  stage              String    // UNDERSTAND, PLAN, COMMIT, MONITOR, PROTECT, RECOVER, VERIFY, COMPLETE
+  timeDisplay        String    // e.g. 14:10
+  title              String    // EVENT RECEIVED, IMPACT ANALYSIS, etc.
+  description        String
+  metadataJson       String?
+  createdAt          DateTime  @default(now())
+}
+
+model ConnectorCall {
+  id            String    @id @default(cuid())
+  journeyId     String
+  journey       Journey   @relation(fields: [journeyId], references: [id], onDelete: Cascade)
+  connector     String    // TRAVEL, MOBILITY, GNANI, PINE_LABS, DELHIVERY
+  endpoint      String
+  requestJson   String
+  responseJson  String
+  status        String    @default("SUCCESS")
+  createdAt     DateTime  @default(now())
+}
+
+model Payment {
+  id             String    @id @default(cuid())
+  journeyId      String
+  journey        Journey   @relation(fields: [journeyId], references: [id], onDelete: Cascade)
+  amount         Float
+  currency       String    @default("INR")
+  purpose        String
+  authorizedBy   String    // "Wingman Autonomous Authority" or "Rahul (User Approval)"
+  provider       String    @default("Pine Labs")
+  transactionRef String
+  status         String    @default("COMPLETED")
+  createdAt      DateTime  @default(now())
+}
+
+model Shipment {
+  id               String    @id @default(cuid())
+  journeyId        String
+  journey          Journey   @relation(fields: [journeyId], references: [id], onDelete: Cascade)
+  trackingNumber   String    // DELH-9823471
+  title            String    // Wedding Outfits
+  carrier          String    @default("Delhivery Express")
+  origin           String    @default("Hyderabad Hub")
+  destination      String    @default("Goa Resort")
+  status           String    // In Transit, Out for Delivery, Delayed
+  expectedDelivery String    // 21 Dec 2026, 4:00 PM
+  riskLevel        String    @default("NORMAL") // NORMAL, AT_RISK, RECOVERED
+  notes            String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+}
+
+model Notification {
+  id         String    @id @default(cuid())
+  journeyId  String
+  journey    Journey   @relation(fields: [journeyId], references: [id], onDelete: Cascade)
+  title      String
+  content    String
+  audience   String    @default("ALL_TRAVELLERS")
+  read       Boolean   @default(false)
+  createdAt  DateTime  @default(now())
+}
+
+model Message {
+  id         String    @id @default(cuid())
+  journeyId  String
+  journey    Journey   @relation(fields: [journeyId], references: [id], onDelete: Cascade)
+  sender     String    // "Wingman" or traveller name
+  content    String
+  isAgent    Boolean   @default(false)
+  createdAt  DateTime  @default(now())
+}
+
+model VoiceEvent {
+  id         String    @id @default(cuid())
+  journeyId  String
+  journey    Journey   @relation(fields: [journeyId], references: [id], onDelete: Cascade)
+  speaker    String
+  transcript String
+  actionJson String?
+  adapter    String    @default("Gnani")
+  createdAt  DateTime  @default(now())
+}
