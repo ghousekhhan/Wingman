@@ -27,7 +27,9 @@ export interface StructuredAgentResult {
   actions: AgentActionItem[];
   verificationRequired: boolean;
   communication: string;
+  displayText?: string;
   spokenResponse?: string;
+  speechText?: string;
   nextStatus: "MONITORING" | "ANALYZING" | "RECOVERING" | "VERIFYING" | "RECOVERED" | "DECISION_REQUIRED";
   humanDecisionRequired: boolean;
   humanQuestion?: string;

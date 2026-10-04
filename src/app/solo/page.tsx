@@ -55,11 +55,12 @@ export default function SoloJourneyPage() {
   });
 
   const [inputText, setInputText] = useState("");
+  const [voiceState, setVoiceState] = useState<"READY" | "LISTENING" | "THINKING" | "SPEAKING">("READY");
+  const [currentSpokenSentence, setCurrentSpokenSentence] = useState<string>("");
   const [isRecording, setIsRecording] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [isSpeaking, setIsSpeaking] = useState(false);
-  const [isAudioMuted, setIsAudioMuted] = useState(false);
   const [statusMessage, setStatusMessage] = useState("Agent Ready");
+  const [isAudioMuted, setIsAudioMuted] = useState(false);
   const [isPlanReady, setIsPlanReady] = useState(false);
 
   // Recovery & Disruption state
@@ -79,34 +80,50 @@ export default function SoloJourneyPage() {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  // Initial welcome speech on first user click or load
+  // Initial welcome speech on first user click or load using Gnani Timbre 2.5
   const playTts = useCallback(
     async (text: string) => {
-      if (isAudioMuted) return;
+      if (isAudioMuted || !text || !text.trim()) return;
       try {
-        setIsSpeaking(true);
+        setVoiceState("SPEAKING");
+        setCurrentSpokenSentence(text);
         if (currentAudioRef.current) {
           currentAudioRef.current.pause();
         }
         const res = await fetch("/api/voice/tts", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ text, voice: "Nalini", lang: "en-IN" }),
+          body: JSON.stringify({
+            text,
+            voice: "Yashvi",
+            language: "en-IN",
+            speed: 1.15,
+            model: "timbre-2.5",
+            sample_rate: 48000,
+          }),
         });
         if (res.ok) {
           const blob = await res.blob();
           const audioUrl = URL.createObjectURL(blob);
           const audio = new Audio(audioUrl);
           currentAudioRef.current = audio;
-          audio.onended = () => setIsSpeaking(false);
-          audio.onerror = () => setIsSpeaking(false);
+          audio.onended = () => {
+            setVoiceState("READY");
+            setCurrentSpokenSentence("");
+          };
+          audio.onerror = () => {
+            setVoiceState("READY");
+            setCurrentSpokenSentence("");
+          };
           await audio.play();
         } else {
-          setIsSpeaking(false);
+          setVoiceState("READY");
+          setCurrentSpokenSentence("");
         }
       } catch (e) {
         console.warn("TTS playback skipped:", e);
-        setIsSpeaking(false);
+        setVoiceState("READY");
+        setCurrentSpokenSentence("");
       }
     },
     [isAudioMuted]
@@ -142,9 +159,11 @@ export default function SoloJourneyPage() {
       processor.connect(audioCtx.destination);
 
       setIsRecording(true);
+      setVoiceState("LISTENING");
       setStatusMessage("Listening...");
     } catch (err: any) {
       console.error("Mic error:", err);
+      setVoiceState("READY");
       setStatusMessage("Mic unavailable. Use text fallback.");
     }
   };
@@ -153,7 +172,8 @@ export default function SoloJourneyPage() {
   const stopRecording = async () => {
     if (!isRecording) return;
     setIsRecording(false);
-    setStatusMessage("Transcribing with Gnani...");
+    setVoiceState("THINKING");
+    setStatusMessage("Wingman is checking your journey...");
 
     try {
       if (processorRef.current) processorRef.current.disconnect();
@@ -165,6 +185,7 @@ export default function SoloJourneyPage() {
       // Merge chunks into 16kHz 16-bit PCM WAV
       const totalLength = chunksRef.current.reduce((acc, c) => acc + c.length, 0);
       if (totalLength === 0) {
+        setVoiceState("READY");
         setStatusMessage("Agent Ready");
         return;
       }
@@ -233,10 +254,12 @@ export default function SoloJourneyPage() {
       if (transcript) {
         await handleSendInput(transcript);
       } else {
+        setVoiceState("READY");
         setStatusMessage("No speech detected. Try again.");
       }
     } catch (e: any) {
       console.error("Transcription error:", e);
+      setVoiceState("READY");
       setStatusMessage("Voice recognition error. Please type.");
     }
   };
@@ -256,7 +279,8 @@ export default function SoloJourneyPage() {
     };
     setMessages((prev) => [...prev, userMsg]);
     setIsProcessing(true);
-    setStatusMessage("Wingman thinking...");
+    setVoiceState("THINKING");
+    setStatusMessage("Wingman is checking your journey...");
 
     try {
       // Check if user is asking to disrupt or inject flight change
@@ -304,19 +328,24 @@ export default function SoloJourneyPage() {
         setIsPlanReady(true);
       }
 
-      // Add agent response
+      const displayText = result.displayText || result.message;
+      const speechText = result.speechText || result.spokenResponse;
+
+      // Add agent response for screen
       const agentMsg: ChatMessage = {
         id: `msg-agent-${Date.now()}`,
         role: "agent",
-        text: result.message,
+        text: displayText,
         timestamp: "Just now",
       };
       setMessages((prev) => [...prev, agentMsg]);
       setStatusMessage("Agent Ready");
 
-      // Play short, natural spoken response via Gnani TTS
-      if (result.spokenResponse) {
-        await playTts(result.spokenResponse);
+      // Play short, natural spoken response via Gnani Timbre 2.5
+      if (speechText) {
+        await playTts(speechText);
+      } else {
+        setVoiceState("READY");
       }
     } catch (err: any) {
       console.error("Agent error:", err);
@@ -327,6 +356,7 @@ export default function SoloJourneyPage() {
         timestamp: "Just now",
       };
       setMessages((prev) => [...prev, errMsg]);
+      setVoiceState("READY");
       setStatusMessage("Agent Ready");
     } finally {
       setIsProcessing(false);
@@ -336,7 +366,8 @@ export default function SoloJourneyPage() {
   // Handle disruption simulation / voice prompt
   const handleDisruptionTrigger = async (disruptionText: string) => {
     setIsProcessing(true);
-    setStatusMessage("Assessing journey impact...");
+    setVoiceState("THINKING");
+    setStatusMessage("Wingman is checking your journey...");
 
     try {
       const res = await fetch("/api/agent", {
@@ -351,6 +382,15 @@ export default function SoloJourneyPage() {
 
       const data = await res.json();
       const agentResult = data.agentResult;
+
+      const displayText =
+        agentResult.displayText ||
+        agentResult.message ||
+        `Flight disruption detected. I've analyzed your commitments and found 4 candidate options below.`;
+      const speechText =
+        agentResult.speechText ||
+        agentResult.spokenResponse ||
+        "Your flight was cancelled. I'm checking what that affects.";
 
       setActiveDisruption({
         event: agentResult.event,
@@ -389,25 +429,27 @@ export default function SoloJourneyPage() {
             tradeoff: "Cheapest, but misses the 6:00 PM wedding arrival deadline",
           },
         ],
-        spokenResponse:
-          agentResult.spokenResponse ||
-          "Got it. Your flight is cancelled. I'm checking what that does to the rest of your journey. I found four options on your screen.",
+        spokenResponse: speechText,
       });
 
       const agentMsg: ChatMessage = {
         id: `msg-disrupt-${Date.now()}`,
         role: "agent",
-        text: `Flight disruption detected. I've analyzed your commitments and found 4 candidate options below.`,
+        text: displayText,
         timestamp: "Just now",
       };
       setMessages((prev) => [...prev, agentMsg]);
       setStatusMessage("Decision required");
 
-      if (agentResult.spokenResponse) {
-        await playTts(agentResult.spokenResponse);
+      if (speechText) {
+        await playTts(speechText);
+      } else {
+        setVoiceState("READY");
       }
     } catch (e: any) {
       console.error("Disruption error:", e);
+      setVoiceState("READY");
+      setStatusMessage("Agent Ready");
     } finally {
       setIsProcessing(false);
     }
@@ -416,7 +458,8 @@ export default function SoloJourneyPage() {
   // Execute selected recovery option
   const executeRecoveryOption = async (option: any) => {
     setExecutingOptionId(option.id);
-    setStatusMessage(`Executing ${option.name || option.provider}...`);
+    setVoiceState("THINKING");
+    setStatusMessage(`Wingman is booking ${option.name || option.provider}...`);
 
     try {
       const res = await fetch("/api/agent", {
@@ -433,20 +476,30 @@ export default function SoloJourneyPage() {
       const data = await res.json();
       setRecoveryExecuted(true);
 
+      const finishDisplay =
+        data.agentResult?.displayText ||
+        data.agentResult?.message ||
+        `Confirmed! Booked ${option.provider} for ₹${option.cost.toLocaleString("en-IN")}. Pine Labs settlement verified. Ground airport transfer automatically re-synchronized.`;
+
+      const finishSpeech =
+        data.agentResult?.speechText ||
+        data.agentResult?.spokenResponse ||
+        "You're back on track. Your new flight is confirmed.";
+
       const finishMsg: ChatMessage = {
         id: `msg-finish-${Date.now()}`,
         role: "agent",
-        text: `Confirmed! Booked ${option.provider} for ₹${option.cost.toLocaleString("en-IN")}. Pine Labs settlement verified. Ground airport transfer automatically re-synchronized.`,
+        text: finishDisplay,
         timestamp: "Just now",
       };
       setMessages((prev) => [...prev, finishMsg]);
       setStatusMessage("Journey Recovered & Viable");
 
-      await playTts(
-        `Payment confirmed via Pine Labs. Your replacement booking and airport transfer are fully verified.`
-      );
+      await playTts(finishSpeech);
     } catch (e: any) {
       console.error("Recovery execution failed:", e);
+      setVoiceState("READY");
+      setStatusMessage("Agent Ready");
     } finally {
       setExecutingOptionId(null);
     }
@@ -465,17 +518,27 @@ export default function SoloJourneyPage() {
           </Link>
           <div>
             <h1 className="text-sm font-extrabold tracking-widest text-white">WINGMAN SOLO</h1>
-            <div className="flex items-center gap-1.5 text-[11px] font-mono text-zinc-400">
+            <div className="flex items-center gap-1.5 text-[11px] font-mono">
               <span
                 className={`w-2 h-2 rounded-full ${
-                  isRecording
+                  voiceState === "LISTENING"
                     ? "bg-rose-500 animate-ping"
-                    : isProcessing
+                    : voiceState === "THINKING"
                     ? "bg-amber-400 animate-pulse"
+                    : voiceState === "SPEAKING"
+                    ? "bg-indigo-400 animate-pulse"
                     : "bg-emerald-500"
                 }`}
               />
-              <span>{statusMessage}</span>
+              <span className="text-zinc-300 font-medium">
+                {voiceState === "LISTENING"
+                  ? "Listening..."
+                  : voiceState === "THINKING"
+                  ? "Wingman is checking your journey..."
+                  : voiceState === "SPEAKING"
+                  ? "Speaking"
+                  : "Agent Ready"}
+              </span>
             </div>
           </div>
         </div>
@@ -503,11 +566,26 @@ export default function SoloJourneyPage() {
       <main className="flex-1 max-w-7xl mx-auto w-full p-4 sm:p-6 grid grid-cols-1 lg:grid-cols-12 gap-6">
         {/* Left Column: Voice Agent & Conversation (7 cols) */}
         <div className="lg:col-span-7 flex flex-col h-[calc(100vh-120px)] bg-[#0e1017] rounded-3xl border border-zinc-800/80 p-5 shadow-2xl relative overflow-hidden">
-          {/* Speaking Wave Header */}
-          {isSpeaking && (
-            <div className="absolute top-0 left-0 right-0 py-1.5 bg-gradient-to-r from-indigo-900/60 via-purple-900/60 to-indigo-900/60 border-b border-indigo-500/30 flex items-center justify-center gap-2 text-xs font-mono text-indigo-300 animate-pulse z-10">
-              <Radio className="w-3.5 h-3.5 text-indigo-400" />
-              <span>Wingman Speaking...</span>
+          {/* Voice State Live Status Banners */}
+          {voiceState === "SPEAKING" && currentSpokenSentence && (
+            <div className="absolute top-0 left-0 right-0 px-4 py-2 bg-gradient-to-r from-indigo-950/90 via-purple-950/90 to-indigo-950/90 border-b border-indigo-500/40 flex items-center gap-2.5 text-xs text-indigo-200 z-10 shadow-lg backdrop-blur-md">
+              <Radio className="w-4 h-4 text-indigo-400 animate-pulse shrink-0" />
+              <div className="truncate flex-1">
+                <span className="font-mono text-indigo-400 font-semibold mr-1.5 uppercase tracking-wider text-[10px]">Speaking:</span>
+                <span className="italic font-medium text-white">&ldquo;{currentSpokenSentence}&rdquo;</span>
+              </div>
+            </div>
+          )}
+          {voiceState === "THINKING" && (
+            <div className="absolute top-0 left-0 right-0 px-4 py-1.5 bg-gradient-to-r from-amber-950/80 via-zinc-900 to-amber-950/80 border-b border-amber-500/30 flex items-center justify-center gap-2 text-xs font-mono text-amber-300 animate-pulse z-10">
+              <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+              <span>Wingman is checking your journey...</span>
+            </div>
+          )}
+          {voiceState === "LISTENING" && (
+            <div className="absolute top-0 left-0 right-0 px-4 py-1.5 bg-gradient-to-r from-rose-950/80 via-zinc-900 to-rose-950/80 border-b border-rose-500/30 flex items-center justify-center gap-2 text-xs font-mono text-rose-300 animate-pulse z-10">
+              <Mic className="w-3.5 h-3.5 text-rose-400" />
+              <span>Listening... speak now</span>
             </div>
           )}
 

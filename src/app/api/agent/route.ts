@@ -67,15 +67,26 @@ export async function POST(req: NextRequest) {
       approvedAmount,
     });
 
+    const speechText =
+      agentResult.speechText ||
+      agentResult.spokenResponse ||
+      (agentResult.decision?.type === "ASK_APPROVAL"
+        ? `Replacement option requires ₹${agentResult.decision.cost?.toLocaleString("en-IN")}, which exceeds your spending limit. Please confirm if you approve.`
+        : `I have updated your journey plan to protect your commitments.`);
+
+    const displayText =
+      agentResult.displayText ||
+      agentResult.communication ||
+      speechText;
+
     return NextResponse.json({
       success: true,
       agentResult: {
         ...agentResult,
-        spokenResponse:
-          agentResult.spokenResponse ||
-          (agentResult.decision?.type === "ASK_APPROVAL"
-            ? `Replacement option requires ₹${agentResult.decision.cost?.toLocaleString("en-IN")}, which exceeds your spending limit. Please confirm if you approve.`
-            : `I have updated your journey plan to protect your commitments.`),
+        displayText,
+        communication: displayText,
+        speechText,
+        spokenResponse: speechText,
       },
       journeyState,
     });

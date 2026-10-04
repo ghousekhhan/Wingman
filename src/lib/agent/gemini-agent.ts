@@ -42,7 +42,9 @@ export interface StructuredAgentResult {
   actions: AgentActionItem[];
   verificationRequired: boolean;
   communication: string;
+  displayText: string; // Detailed text for screen
   spokenResponse: string; // Short, natural, 1-2 sentences for TTS
+  speechText: string; // Strict alias for spoken voice
   nextStatus: "MONITORING" | "ANALYZING" | "RECOVERING" | "VERIFYING" | "RECOVERED" | "DECISION_REQUIRED";
   humanDecisionRequired: boolean;
   humanQuestion?: string;
@@ -93,7 +95,9 @@ export interface InterviewResult {
   missingFields: string[];
   isReady: boolean;
   spokenResponse: string;
+  speechText?: string;
   message: string;
+  displayText?: string;
   suggestedQuestion?: string;
   plan?: Array<{
     step: number;
@@ -234,12 +238,17 @@ Extract newly provided information, merge with Current Journey State, identify w
         ? this.generatePlanFromState(merged)
         : undefined;
 
+      const speech = geminiOutput.speechText || geminiOutput.spokenResponse || "Got it. Tell me more about your journey.";
+      const display = geminiOutput.displayText || geminiOutput.message || speech;
+
       return {
         updatedState: merged,
         missingFields: geminiOutput.missingFields || [],
         isReady: !!geminiOutput.isReady,
-        spokenResponse: geminiOutput.spokenResponse || "Got it. Tell me more about your journey.",
-        message: geminiOutput.message || geminiOutput.spokenResponse,
+        spokenResponse: speech,
+        speechText: speech,
+        message: display,
+        displayText: display,
         suggestedQuestion: geminiOutput.suggestedQuestion,
         plan,
       };
@@ -412,7 +421,9 @@ Extract newly provided information, merge with Current Journey State, identify w
       missingFields: missing,
       isReady,
       spokenResponse,
+      speechText: spokenResponse,
       message,
+      displayText: message,
       suggestedQuestion,
       plan: updated.currentPlan,
     };
@@ -493,12 +504,17 @@ Extract newly provided information, merge with Current Journey State, identify w
 
     updated.currentPlan = this.generatePlanFromState(updated);
 
+    const spoken = `I've updated your journey plan and constraints.`;
+    const msg = `Updated journey state and regenerated plan according to your preferences.`;
+
     return {
       updatedState: updated,
       missingFields: [],
       isReady: true,
-      spokenResponse: `I've updated your journey plan and constraints.`,
-      message: `Updated journey state and regenerated plan according to your preferences.`,
+      spokenResponse: spoken,
+      speechText: spoken,
+      message: msg,
+      displayText: msg,
       plan: updated.currentPlan,
     };
   }
@@ -656,7 +672,9 @@ Extract newly provided information, merge with Current Journey State, identify w
         }],
         verificationRequired: false,
         communication: `Autonomous spending authority updated to ₹${newLimit.toLocaleString("en-IN")}. Wingman will act within this limit.`,
+        displayText: `Autonomous spending authority updated to ₹${newLimit.toLocaleString("en-IN")}. Wingman will act within this limit.`,
         spokenResponse: `Updated your spending limit to ₹${newLimit.toLocaleString("en-IN")}.`,
+        speechText: `Updated your spending limit to ₹${newLimit.toLocaleString("en-IN")}.`,
         nextStatus: "MONITORING",
         humanDecisionRequired: false,
       };
@@ -683,7 +701,9 @@ Extract newly provided information, merge with Current Journey State, identify w
         }],
         verificationRequired: false,
         communication: `Registered constraint: Travellers must remain together. Step-free ramp/buggy assistance locked for all segments.`,
+        displayText: `Registered constraint: Travellers must remain together. Step-free ramp/buggy assistance locked for all segments.`,
         spokenResponse: `Got it. I've locked the requirement to keep everyone together with step-free assistance.`,
+        speechText: `Got it. I've locked the requirement to keep everyone together with step-free assistance.`,
         nextStatus: "MONITORING",
         humanDecisionRequired: false,
       };
@@ -721,7 +741,9 @@ Extract newly provided information, merge with Current Journey State, identify w
         ],
         verificationRequired: true,
         communication: `Rebooked 3 accessible suites at Grand Heritage Resort. Room confirmations verified.`,
+        displayText: `Rebooked 3 accessible suites at Grand Heritage Resort. Room confirmations verified.`,
         spokenResponse: `I found and secured replacement accessible hotel rooms. Your check-in is safe.`,
+        speechText: `I found and secured replacement accessible hotel rooms. Your check-in is safe.`,
         nextStatus: "RECOVERED",
         humanDecisionRequired: false,
       };
@@ -759,7 +781,9 @@ Extract newly provided information, merge with Current Journey State, identify w
         ],
         verificationRequired: true,
         communication: `Booked replacement accessible ground transfer (Ref: ${transferBooking.transferReference}). Driver assigned.`,
+        displayText: `Booked replacement accessible ground transfer (Ref: ${transferBooking.transferReference}). Driver assigned.`,
         spokenResponse: `I've booked a replacement accessible van from the airport. Driver is assigned.`,
+        speechText: `I've booked a replacement accessible van from the airport. Driver is assigned.`,
         nextStatus: "RECOVERED",
         humanDecisionRequired: false,
       };
@@ -784,7 +808,9 @@ Extract newly provided information, merge with Current Journey State, identify w
         actions: [],
         verificationRequired: true,
         communication: `Replacement option requires ₹14,800, exceeding your autonomous authority of ₹${journey.authorityLimit.toLocaleString("en-IN")}. Do you approve spending ₹14,800?`,
+        displayText: `Replacement option requires ₹14,800, exceeding your autonomous authority of ₹${journey.authorityLimit.toLocaleString("en-IN")}. Do you approve spending ₹14,800?`,
         spokenResponse: `The replacement flight costs ₹14,800, which exceeds your spending limit. Please confirm if you approve.`,
+        speechText: `The replacement flight costs ₹14,800, which exceeds your spending limit. Please confirm if you approve.`,
         nextStatus: "DECISION_REQUIRED",
         humanDecisionRequired: true,
         humanQuestion: `Replacement option requires ₹14,800, exceeding your ₹${journey.authorityLimit.toLocaleString("en-IN")} authority. Do you approve?`,
@@ -867,7 +893,9 @@ Extract newly provided information, merge with Current Journey State, identify w
         ],
         verificationRequired: true,
         communication: `Approved ₹${finalCost.toLocaleString("en-IN")} payment settled via Pine Labs. Flight booked and arrival transfer synchronized.`,
-        spokenResponse: `Payment confirmed via Pine Labs. Your flight and airport transfer are fully booked.`,
+        displayText: `Approved ₹${finalCost.toLocaleString("en-IN")} payment settled via Pine Labs. Flight booked and arrival transfer synchronized.`,
+        spokenResponse: `You're back on track. Your new flight is confirmed, and I've fixed the airport transfer too.`,
+        speechText: `You're back on track. Your new flight is confirmed, and I've fixed the airport transfer too.`,
         nextStatus: "RECOVERED",
         humanDecisionRequired: false,
         paymentDetails: paymentResult,
@@ -952,7 +980,9 @@ Extract newly provided information, merge with Current Journey State, identify w
       ],
       verificationRequired: true,
       communication: `Resolved via ${chosenOption.provider} (₹${chosenOption.cost.toLocaleString("en-IN")}, arrives ${chosenOption.arrivalTime}). Downstream airport transfer synchronized.`,
-      spokenResponse: `I found a solution that arrives at ${chosenOption.arrivalTime} and keeps everyone together. Your transfer is updated.`,
+      displayText: `Your flight from Hyderabad to Goa was cancelled.\n\nThis affects your 6 PM arrival deadline and the airport transfer connected to your original flight.\n\nI found four recovery options:\n- Option A arrives at 5:20 PM, keeps all five travellers together, and supports Meera's accessibility requirement.\n- Option B arrives earlier but costs more.\n- Option C is cheaper but separates the group.\n- Option D misses the wedding arrival deadline.\n\nResolved via ${chosenOption.provider} (₹${chosenOption.cost.toLocaleString("en-IN")}, arrives ${chosenOption.arrivalTime}). Downstream airport transfer synchronized.`,
+      spokenResponse: `Your flight was cancelled. I found four ways forward. I've put them on your screen.`,
+      speechText: `Your flight was cancelled. I found four ways forward. I've put them on your screen.`,
       nextStatus: "RECOVERED",
       humanDecisionRequired: false,
       candidateOptions: [

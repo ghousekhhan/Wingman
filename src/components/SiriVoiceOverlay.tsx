@@ -259,8 +259,11 @@ export default function SiriVoiceOverlay({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           text,
-          voice: "Nalini",
-          lang: "en-IN",
+          voice: "Yashvi",
+          language: "en-IN",
+          speed: 1.15,
+          model: "timbre-2.5",
+          sample_rate: 48000,
         }),
       });
 

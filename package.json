@@ -10,7 +10,8 @@
     "seed": "tsx prisma/seed.ts",
     "test": "tsx scripts/test-general-agent.ts",
     "test:sim": "tsx scripts/test-agent-simulations.ts",
-    "test:solo": "tsx scripts/test-gemini-solo-flow.ts"
+    "test:solo": "tsx scripts/test-gemini-solo-flow.ts",
+    "test:voice": "tsx scripts/test-gnani-timbre.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
