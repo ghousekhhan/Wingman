@@ -8,7 +8,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(
         {
           success: false,
-          error: "Voice integration is not configured. Set GNANI_API_KEY in environment variables to enable live Gnani STT.",
+          error: "Voice integration is not configured. Set GNANI_API_KEY in environment variables.",
           isConfigured: false,
         },
         { status: 503 }
@@ -36,7 +36,7 @@ export async function POST(req: NextRequest) {
     const response = await fetch("https://api.vachana.ai/stt/v3", {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${apiKey}`,
+        "X-API-Key-ID": apiKey,
       },
       body: gnaniFormData,
     });
@@ -46,14 +46,19 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(
         {
           success: false,
-          error: `Gnani STT API responded with status ${response.status}: ${errText}`,
+          error: `Gnani STT API error (${response.status}): ${errText}`,
         },
         { status: response.status }
       );
     }
 
     const data = await response.json();
-    const transcript = data.transcript || data.text || data.result?.transcript || "";
+    const transcript =
+      data.transcript ||
+      data.output?.literal ||
+      data.text ||
+      data.result?.transcript ||
+      "";
 
     return NextResponse.json({
       success: true,
@@ -61,6 +66,7 @@ export async function POST(req: NextRequest) {
       gnaniResponse: data,
     });
   } catch (error: any) {
+    console.error("STT Route Error:", error);
     return NextResponse.json(
       {
         success: false,

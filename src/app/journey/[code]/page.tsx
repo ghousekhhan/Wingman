@@ -22,6 +22,7 @@ import {
   X,
   Sparkles,
 } from "lucide-react";
+import SiriVoiceOverlay from "@/components/SiriVoiceOverlay";
 
 export default function JourneyHomePage({ params }: { params: { code: string } }) {
   const roomCode = params.code || "ROOM-WING01";
@@ -35,12 +36,7 @@ export default function JourneyHomePage({ params }: { params: { code: string } }
   const [inputMessage, setInputMessage] = useState("");
   const [isProcessing, setIsProcessing] = useState(false);
   const [lastAgentResult, setLastAgentResult] = useState<any>(null);
-
-  // Voice recording state
-  const [voiceState, setVoiceState] = useState<"READY" | "LISTENING" | "THINKING" | "ACTING" | "SPEAKING">("READY");
-  const [voiceNotice, setVoiceNotice] = useState<string | null>(null);
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const audioChunksRef = useRef<Blob[]>([]);
+  const [isSiriOpen, setIsSiriOpen] = useState(false);
 
   // Simulation & Modal state
   const [isSimulationOpen, setIsSimulationOpen] = useState(false);
@@ -75,7 +71,6 @@ export default function JourneyHomePage({ params }: { params: { code: string } }
     if (!textToSend.trim() && !approvalGranted) return;
 
     setIsProcessing(true);
-    setVoiceNotice(null);
     try {
       const res = await fetch("/api/agent", {
         method: "POST",
@@ -100,77 +95,14 @@ export default function JourneyHomePage({ params }: { params: { code: string } }
         } else {
           setIsDecisionOpen(false);
         }
+        return data.agentResult;
       } else {
         alert(data.error || "Wingman could not process your instruction.");
       }
     } catch (e: any) {
-      console.error(e);
+      console.error("Agent execution error:", e);
     } finally {
       setIsProcessing(false);
-      setVoiceState("READY");
-    }
-  };
-
-  // Voice Mic click handler
-  const handleMicToggle = async () => {
-    if (voiceState === "LISTENING") {
-      // Stop recording
-      if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
-        mediaRecorderRef.current.stop();
-      }
-      return;
-    }
-
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      audioChunksRef.current = [];
-      const mediaRecorder = new MediaRecorder(stream);
-      mediaRecorderRef.current = mediaRecorder;
-
-      mediaRecorder.ondataavailable = (event) => {
-        if (event.data.size > 0) {
-          audioChunksRef.current.push(event.data);
-        }
-      };
-
-      mediaRecorder.onstop = async () => {
-        const audioBlob = new Blob(audioChunksRef.current, { type: "audio/wav" });
-        stream.getTracks().forEach((track) => track.stop());
-
-        // Send to Gnani STT endpoint
-        setVoiceState("THINKING");
-        const formData = new FormData();
-        formData.append("audio_file", audioBlob, "recording.wav");
-
-        try {
-          const sttRes = await fetch("/api/voice/stt", {
-            method: "POST",
-            body: formData,
-          });
-
-          const sttData = await sttRes.json();
-          if (sttData.success && sttData.transcript) {
-            setVoiceState("ACTING");
-            await handleSendMessage(sttData.transcript);
-          } else {
-            // Voice not configured notice
-            setVoiceNotice(
-              sttData.error || "Voice integration is not configured. Set GNANI_API_KEY in environment variables."
-            );
-            setVoiceState("READY");
-          }
-        } catch (sttErr: any) {
-          setVoiceNotice("Voice integration is not configured. Set GNANI_API_KEY in environment variables.");
-          setVoiceState("READY");
-        }
-      };
-
-      mediaRecorder.start();
-      setVoiceState("LISTENING");
-    } catch (err: any) {
-      // Mic access blocked or not available in environment
-      setVoiceNotice("Microphone unavailable. You can continue by typing directly below.");
-      setVoiceState("READY");
     }
   };
 
@@ -247,8 +179,17 @@ export default function JourneyHomePage({ params }: { params: { code: string } }
             ))}
           </nav>
 
-          {/* Discreet Simulation Trigger */}
-          <div className="flex items-center space-x-2">
+          {/* Controls: Voice Agent & Simulation */}
+          <div className="flex items-center space-x-2.5">
+            <button
+              onClick={() => setIsSiriOpen(true)}
+              className="px-2.5 py-1 rounded-lg bg-indigo-950/80 border border-indigo-700/60 hover:bg-indigo-900/80 text-xs font-medium text-indigo-300 flex items-center gap-1.5 transition shadow"
+              title="Open Siri Voice Agent (Gnani STT/TTS)"
+            >
+              <Mic className="w-3.5 h-3.5 text-indigo-400 animate-pulse" />
+              <span className="hidden sm:inline">Voice Agent</span>
+            </button>
+
             <button
               onClick={() => setIsSimulationOpen(true)}
               className="text-xs text-zinc-500 hover:text-indigo-400 flex items-center gap-1 font-mono transition"
@@ -447,20 +388,14 @@ export default function JourneyHomePage({ params }: { params: { code: string } }
                 />
 
                 <div className="absolute right-3 flex items-center space-x-1.5">
-                  {/* Mic Button (Gnani Voice) */}
+                  {/* Mic Button (Gnani Voice Siri Agent) */}
                   <button
-                    onClick={handleMicToggle}
+                    onClick={() => setIsSiriOpen(true)}
                     disabled={isProcessing}
-                    className={`w-9 h-9 rounded-xl flex items-center justify-center transition shadow-md ${
-                      voiceState === "LISTENING"
-                        ? "bg-rose-600 animate-pulse text-white"
-                        : voiceState === "THINKING" || voiceState === "ACTING"
-                        ? "bg-indigo-600 animate-pulse text-white"
-                        : "bg-zinc-800 hover:bg-zinc-700 text-zinc-300"
-                    }`}
-                    title="Speak to Wingman (Gnani Voice STT)"
+                    className="w-9 h-9 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-white flex items-center justify-center transition shadow-md group relative"
+                    title="Speak to Wingman (Gnani Voice Siri Agent)"
                   >
-                    <Mic className="w-4 h-4" />
+                    <Mic className="w-4 h-4 text-indigo-400 group-hover:scale-110 transition" />
                   </button>
 
                   {/* Send Button */}
@@ -473,21 +408,6 @@ export default function JourneyHomePage({ params }: { params: { code: string } }
                   </button>
                 </div>
               </div>
-
-              {/* Voice State / Notice Indicator */}
-              {voiceState !== "READY" && (
-                <div className="text-center text-xs font-mono text-indigo-400 animate-pulse">
-                  {voiceState === "LISTENING" && "● LISTENING... Speak now (tap mic to finish)"}
-                  {voiceState === "THINKING" && "● WINGMAN IS ASSESSING YOUR JOURNEY..."}
-                  {voiceState === "ACTING" && "● RECOVERING YOUR JOURNEY..."}
-                </div>
-              )}
-
-              {voiceNotice && (
-                <div className="p-3 rounded-xl bg-zinc-900 border border-zinc-800 text-xs text-amber-300 text-center font-mono">
-                  {voiceNotice}
-                </div>
-              )}
             </div>
           </div>
         )}
@@ -752,6 +672,16 @@ export default function JourneyHomePage({ params }: { params: { code: string } }
           </div>
         </div>
       )}
+
+      {/* 8. SIRI VOICE OVERLAY (GNANI STT / TTS) */}
+      <SiriVoiceOverlay
+        isOpen={isSiriOpen}
+        onClose={() => setIsSiriOpen(false)}
+        onTranscriptReceived={async (text) => {
+          const result = await handleSendMessage(text);
+          return result?.communication;
+        }}
+      />
     </div>
   );
 }
