@@ -118,6 +118,79 @@ async function runGeneralAgentTests() {
   });
   assert(res10.agentResult.communication.length > 20, "Agent provides transparent decision rationale");
 
+  // SECTION 24 TESTS:
+  // TEST 11: Father cannot walk long distances
+  console.log("\n--- TEST 11: Father mobility constraint ---");
+  const res11 = await generalWingmanAgent.process({
+    journeyCode: "ROOM-WING01",
+    message: "My father cannot walk long distances.",
+  });
+  assert(res11.agentResult.communication.toLowerCase().includes("ramp") || res11.agentResult.communication.toLowerCase().includes("buggy") || res11.agentResult.communication.toLowerCase().includes("step-free"), "Agent registers mobility constraint");
+
+  // TEST 12: We have a ₹5,000 budget
+  console.log("\n--- TEST 12: We have a ₹5,000 budget ---");
+  const res12 = await generalWingmanAgent.process({
+    journeyCode: "ROOM-WING01",
+    message: "We have a ₹5,000 budget.",
+  });
+  assert(res12.agentResult.communication.includes("5,000"), "Agent enforces ₹5,000 budget");
+
+  // TEST 13: Connecting flight leaves in 90 minutes
+  console.log("\n--- TEST 13: Connecting flight in 90 minutes ---");
+  const res13 = await generalWingmanAgent.process({
+    journeyCode: "ROOM-WING01",
+    message: "My connecting flight leaves in 90 minutes.",
+  });
+  assert(res13.agentResult.communication.includes("90"), "Agent evaluates connection buffer");
+
+  // TEST 14: Can you show me all my options?
+  console.log("\n--- TEST 14: Show all options ---");
+  const res14 = await generalWingmanAgent.process({
+    journeyCode: "ROOM-WING01",
+    message: "Can you show me all my options?",
+  });
+  assert(res14.agentResult.communication.includes("Option 1") && res14.agentResult.communication.includes("Option 2"), "Agent presents candidate options");
+
+  // TEST 15: Which option protects the most important commitment?
+  console.log("\n--- TEST 15: Which option protects most important commitment ---");
+  const res15 = await generalWingmanAgent.process({
+    journeyCode: "ROOM-WING01",
+    message: "Which option protects the most important commitment?",
+  });
+  assert(res15.agentResult.communication.includes("wedding") || res15.agentResult.communication.includes("Option 1"), "Agent evaluates primary commitment protection");
+
+  // TEST 16: I want the cheapest option
+  console.log("\n--- TEST 16: Cheapest option inquiry ---");
+  const res16 = await generalWingmanAgent.process({
+    journeyCode: "ROOM-WING01",
+    message: "I want the cheapest option.",
+  });
+  assert(res16.agentResult.communication.includes("4,200") || res16.agentResult.communication.toLowerCase().includes("cheapest"), "Agent highlights cheapest option trade-off");
+
+  // TEST 17: I want everyone together even if it costs more
+  console.log("\n--- TEST 17: Group together preference ---");
+  const res17 = await generalWingmanAgent.process({
+    journeyCode: "ROOM-WING01",
+    message: "I want everyone together even if it costs more.",
+  });
+  assert(res17.agentResult.communication.toLowerCase().includes("together") || res17.agentResult.communication.toLowerCase().includes("split"), "Agent prioritizes group continuity over split fares");
+
+  // TEST 18: My flight is cancelled but the wedding is tomorrow
+  console.log("\n--- TEST 18: Wedding is tomorrow ---");
+  const res18 = await generalWingmanAgent.process({
+    journeyCode: "ROOM-WING01",
+    message: "My flight is cancelled but the wedding is tomorrow.",
+  });
+  assert(res18.agentResult.communication.toLowerCase().includes("tomorrow") || res18.agentResult.communication.toLowerCase().includes("margin"), "Agent re-evaluates next-day commitment timeline");
+
+  // TEST 19: I don't want to travel anymore
+  console.log("\n--- TEST 19: Traveller cancellation request ---");
+  const res19 = await generalWingmanAgent.process({
+    journeyCode: "ROOM-WING01",
+    message: "I don't want to travel anymore.",
+  });
+  assert(res19.agentResult.communication.toLowerCase().includes("cancellation") || res19.agentResult.communication.toLowerCase().includes("refund"), "Agent initiates cancellation and refund protocol");
+
   // Final reset to leave demo clean
   await seedJourney();
 

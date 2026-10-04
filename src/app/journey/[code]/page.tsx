@@ -23,6 +23,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import SiriVoiceOverlay from "@/components/SiriVoiceOverlay";
+import HumanDecisionView, { DecisionOption } from "@/components/HumanDecisionView";
 
 export default function JourneyHomePage({ params }: { params: { code: string } }) {
   const roomCode = params.code || "ROOM-WING01";
@@ -37,6 +38,10 @@ export default function JourneyHomePage({ params }: { params: { code: string } }
   const [isProcessing, setIsProcessing] = useState(false);
   const [lastAgentResult, setLastAgentResult] = useState<any>(null);
   const [isSiriOpen, setIsSiriOpen] = useState(false);
+
+  // Human Decision UI state (Sections 10, 11, 13, 14)
+  const [activeDisruptionForDecision, setActiveDisruptionForDecision] = useState<string | null>(null);
+  const [isSurgeExceeded, setIsSurgeExceeded] = useState(false);
 
   // Simulation & Modal state
   const [isSimulationOpen, setIsSimulationOpen] = useState(false);
@@ -113,6 +118,8 @@ export default function JourneyHomePage({ params }: { params: { code: string } }
       await fetch("/api/simulations/reset", { method: "POST" });
       await loadState();
       setLastAgentResult(null);
+      setActiveDisruptionForDecision(null);
+      setIsSurgeExceeded(false);
       setIsDecisionOpen(false);
       setIsSimulationOpen(false);
     } catch (e) {
@@ -207,17 +214,18 @@ export default function JourneyHomePage({ params }: { params: { code: string } }
         {/* TAB 1: JOURNEY (THE HERO EXPERIENCE) */}
         {activeTab === "journey" && (
           <div className="space-y-8 animate-in fade-in duration-200">
-            {/* Journey Title Banner */}
+            {/* Journey Title Banner (Section 15) */}
             <div className="text-center space-y-2 pt-2">
-              <span className="text-[11px] font-mono tracking-widest text-zinc-500 uppercase">
-                ACTIVE JOURNEY • {journey?.code || "ROOM-WING01"}
-              </span>
-              <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight">
+              <h1 className="text-3xl sm:text-5xl font-extrabold tracking-tight">
                 {journey?.title?.toUpperCase() || "GOA FAMILY WEDDING"}
               </h1>
-              <p className="text-xs text-zinc-400">
-                21 December 2026 • 5 Travellers • Sister&apos;s Wedding (Deadline: 6:00 PM) • Authority: ₹{journey?.authorityLimit?.toLocaleString("en-IN") || "10,000"}
-              </p>
+              <div className="flex items-center justify-center gap-3 text-xs font-mono text-zinc-400">
+                <span className="font-bold text-white uppercase">{journey?.members?.length || 5} TRAVELLERS</span>
+                <span>•</span>
+                <span className="text-emerald-400 font-bold uppercase">5 COMMITMENTS PROTECTED</span>
+                <span>•</span>
+                <span>Autonomous Authority: ₹{journey?.authorityLimit?.toLocaleString("en-IN") || "10,000"}</span>
+              </div>
             </div>
 
             {/* Simple Journey Timeline: HYDERABAD ↓ FLIGHT ↓ GOA ↓ TRANSFER ↓ HOTEL ↓ WEDDING */}
@@ -298,8 +306,31 @@ export default function JourneyHomePage({ params }: { params: { code: string } }
               </div>
             </div>
 
+            {/* HUMAN DECISION UI (Sections 10, 11, 13, 14) */}
+            {activeDisruptionForDecision && (
+              <HumanDecisionView
+                disruptionTitle={activeDisruptionForDecision}
+                authorityLimit={journey?.authorityLimit || 10000}
+                isAuthorityExceeded={isSurgeExceeded}
+                exceededAmount={14800}
+                onOptionSelected={async (opt) => {
+                  await handleSendMessage(`I choose ${opt.name}: ${opt.provider} at ₹${opt.cost}`);
+                  setActiveDisruptionForDecision(null);
+                }}
+                onApproveExceeded={async () => {
+                  await handleSendMessage("I approve the ₹14,800 option to protect the wedding", true);
+                  setActiveDisruptionForDecision(null);
+                  setIsSurgeExceeded(false);
+                }}
+                onClose={() => {
+                  setActiveDisruptionForDecision(null);
+                  setIsSurgeExceeded(false);
+                }}
+              />
+            )}
+
             {/* 3. HERO ACTION / RECOVERY CARD (Part 13 Hero Moment) */}
-            {lastAgentResult && (
+            {lastAgentResult && !activeDisruptionForDecision && (
               <div className="rounded-2xl border border-zinc-800 bg-[#0e1017] p-6 shadow-2xl space-y-5 animate-in fade-in duration-300">
                 {/* Header: At Risk or Recovered */}
                 <div className="flex items-center justify-between pb-3 border-b border-zinc-800">
@@ -370,6 +401,20 @@ export default function JourneyHomePage({ params }: { params: { code: string } }
                 <div className="p-3.5 rounded-xl bg-black/40 border border-zinc-800 text-xs text-zinc-300">
                   <span className="text-indigo-400 font-bold">Wingman to Travellers: </span>
                   {lastAgentResult.communication}
+                </div>
+
+                {/* Option inspection toggle (Section 13) */}
+                <div className="pt-2 border-t border-zinc-800/80 flex items-center justify-between text-xs font-mono">
+                  <button
+                    onClick={() => {
+                      setActiveDisruptionForDecision("Flight HYD-GOI Cancelled");
+                      setIsSurgeExceeded(false);
+                    }}
+                    className="text-indigo-400 hover:text-indigo-300 underline flex items-center gap-1.5 transition font-semibold"
+                  >
+                    <span>View all 4 evaluated recovery options & trade-offs →</span>
+                  </button>
+                  <span className="text-[11px] text-zinc-500">Human Choice Permitted</span>
                 </div>
               </div>
             )}
@@ -570,23 +615,25 @@ export default function JourneyHomePage({ params }: { params: { code: string } }
                 <button
                   onClick={() => {
                     setIsSimulationOpen(false);
-                    handleSendMessage("My flight HYD-GOI was cancelled.");
+                    setActiveDisruptionForDecision("Flight HYD-GOI Cancelled");
+                    setIsSurgeExceeded(false);
                   }}
                   className="p-3 rounded-xl border border-indigo-700 bg-indigo-950/40 hover:bg-indigo-900/60 text-left text-xs space-y-1 transition"
                 >
                   <div className="font-bold text-white">Primary: Flight Cancelled</div>
-                  <div className="text-[11px] text-zinc-400">Agent chooses Option A (₹6,400) & repairs transfer.</div>
+                  <div className="text-[11px] text-zinc-400">Wingman presents 4 options; human selects & recovers.</div>
                 </button>
 
                 <button
                   onClick={() => {
                     setIsSimulationOpen(false);
-                    handleSendMessage("Flight cancelled. High-demand holiday surge. Option A costs 14800.");
+                    setActiveDisruptionForDecision("Flight HYD-GOI Cancelled (High-Demand Surge Pricing)");
+                    setIsSurgeExceeded(true);
                   }}
                   className="p-3 rounded-xl border border-amber-700 bg-amber-950/40 hover:bg-amber-900/60 text-left text-xs space-y-1 transition"
                 >
                   <div className="font-bold text-white">Authority Exceeded</div>
-                  <div className="text-[11px] text-zinc-400">Option A costs ₹14,800. Agent pauses for approval.</div>
+                  <div className="text-[11px] text-zinc-400">Option costs ₹14,800. Agent pauses for approval.</div>
                 </button>
               </div>
             </div>
