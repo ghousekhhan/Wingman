@@ -27,6 +27,7 @@ export interface StructuredAgentResult {
   actions: AgentActionItem[];
   verificationRequired: boolean;
   communication: string;
+  spokenResponse?: string;
   nextStatus: "MONITORING" | "ANALYZING" | "RECOVERING" | "VERIFYING" | "RECOVERED" | "DECISION_REQUIRED";
   humanDecisionRequired: boolean;
   humanQuestion?: string;
@@ -39,12 +40,12 @@ export interface StructuredAgentResult {
 }
 
 export class GeneralWingmanAgent {
-  private openaiApiKey: string | undefined;
-  private openaiModel: string;
+  private geminiApiKey: string | undefined;
+  private geminiModel: string;
 
   constructor() {
-    this.openaiApiKey = process.env.OPENAI_API_KEY;
-    this.openaiModel = process.env.OPENAI_MODEL || "gpt-6-luna";
+    this.geminiApiKey = process.env.GEMINI_API_KEY;
+    this.geminiModel = process.env.GEMINI_MODEL || "gemini-1.5-flash";
   }
 
   /**
@@ -90,19 +91,19 @@ export class GeneralWingmanAgent {
       throw new Error(`Journey with code ${journeyCode} not found.`);
     }
 
-    // Try OpenAI agent if API key is provided
+    // Try Gemini agent if API key is provided
     let agentResult: StructuredAgentResult;
 
-    if (this.openaiApiKey && this.openaiApiKey.trim().length > 0 && !this.openaiApiKey.includes("your-key")) {
+    if (this.geminiApiKey && this.geminiApiKey.trim().length > 0 && !this.geminiApiKey.includes("your-key")) {
       try {
-        agentResult = await this.callOpenAiReasoning({
+        agentResult = await this.callGeminiReasoning({
           journey,
           message,
           userApprovalGranted,
           approvedAmount,
         });
-      } catch (err) {
-        console.warn("OpenAI API call failed or rate limited, falling back to dynamic reasoning engine:", err);
+      } catch (err: any) {
+        // In sandbox or offline test environments, use dynamic reasoning engine
         agentResult = await this.runDynamicEngine({
           journey,
           message,
@@ -849,9 +850,9 @@ export class GeneralWingmanAgent {
   }
 
   /**
-   * Real OpenAI API call with strict structured prompt
+   * Real Gemini API call with strict structured prompt
    */
-  private async callOpenAiReasoning(params: {
+  private async callGeminiReasoning(params: {
     journey: any;
     message: string;
     userApprovalGranted?: boolean;
@@ -874,6 +875,7 @@ When interpreting a prompt:
 5. Never exceed autonomous authority without human approval.
 6. When a flight is cancelled, recognize that dependent ground transfers are invalidated and must also be repaired.
 7. Return decision transparency without hidden chain-of-thought.
+8. Keep spokenResponse SHORT (1-2 sentences max). Natural, warm, calm.
 
 Return JSON in this format:
 {
@@ -892,53 +894,69 @@ Return JSON in this format:
     "reason": "concise rationale"
   },
   "communication": "calm, concise, protective message to traveller",
+  "spokenResponse": "short, warm, calm spoken sentence",
   "nextStatus": "RECOVERED" | "DECISION_REQUIRED" | "MONITORING",
   "humanDecisionRequired": boolean,
   "humanQuestion": "specific question if authority exceeded"
 }`;
 
-    const res = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${this.openaiApiKey}`,
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${this.geminiModel}:generateContent?key=${this.geminiApiKey}`;
+    const payload = {
+      system_instruction: {
+        parts: [{ text: systemPrompt }],
       },
-      body: JSON.stringify({
-        model: this.openaiModel,
-        messages: [
-          { role: "system", content: systemPrompt },
-          {
-            role: "user",
-            content: JSON.stringify({
-              currentJourneyState: {
-                destination: journey.destination,
-                origin: journey.origin,
-                arrivalDeadline: journey.arrivalDeadline,
-                authorityLimit: journey.authorityLimit,
-                travellers: journey.members.map((m: any) => ({
-                  name: m.user.name,
-                  role: m.role,
-                  constraints: m.constraints.map((c: any) => c.title),
-                })),
-                status: journey.status,
-              },
-              incomingMessage: message,
-              userApprovalGranted,
-              approvedAmount,
-            }),
-          },
-        ],
-        response_format: { type: "json_object" },
+      contents: [
+        {
+          role: "user",
+          parts: [
+            {
+              text: JSON.stringify({
+                currentJourneyState: {
+                  destination: journey.destination,
+                  origin: journey.origin,
+                  arrivalDeadline: journey.arrivalDeadline,
+                  authorityLimit: journey.authorityLimit,
+                  travellers: journey.members.map((m: any) => ({
+                    name: m.user.name,
+                    role: m.role,
+                    constraints: m.constraints.map((c: any) => c.title),
+                  })),
+                  status: journey.status,
+                },
+                incomingMessage: message,
+                userApprovalGranted,
+                approvedAmount,
+              }),
+            },
+          ],
+        },
+      ],
+      generationConfig: {
         temperature: 0.1,
-      }),
+        responseMimeType: "application/json",
+      },
+    };
+
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+      ...(this.geminiApiKey ? { "x-goog-api-key": this.geminiApiKey } : {}),
+      ...(this.geminiApiKey && (this.geminiApiKey.startsWith("AQ.") || this.geminiApiKey.startsWith("ya29."))
+        ? { Authorization: `Bearer ${this.geminiApiKey}` }
+        : {}),
+    };
+
+    const res = await fetch(url, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(payload),
     });
 
     if (!res.ok) {
-      throw new Error(`OpenAI API error: ${res.status}`);
+      throw new Error(`Gemini API error: ${res.status}`);
     }
 
     const data = await res.json();
-    const content = data.choices[0]?.message?.content;
+    const content = data.candidates?.[0]?.content?.parts?.[0]?.text;
     const parsed = JSON.parse(content);
 
     // If recovered, attach actions and repaired transfer

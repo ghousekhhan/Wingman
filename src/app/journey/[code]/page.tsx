@@ -726,7 +726,7 @@ export default function JourneyHomePage({ params }: { params: { code: string } }
         onClose={() => setIsSiriOpen(false)}
         onTranscriptReceived={async (text) => {
           const result = await handleSendMessage(text);
-          return result?.communication;
+          return result?.spokenResponse || result?.communication;
         }}
       />
     </div>
