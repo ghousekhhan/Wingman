@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "prisma generate && next build",
     "start": "next start",
     "lint": "next lint",
     "seed": "tsx prisma/seed.ts",
@@ -13,7 +13,8 @@
     "test:solo": "tsx scripts/test-gemini-solo-flow.ts",
     "test:voice": "tsx scripts/test-gnani-timbre.ts",
     "test:urgency": "tsx scripts/test-urgency-spec.ts",
-    "test:reset": "tsx scripts/test-simulation-reset.ts"
+    "test:reset": "tsx scripts/test-simulation-reset.ts",
+    "postinstall": "prisma generate"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
